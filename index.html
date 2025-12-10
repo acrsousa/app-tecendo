@@ -164,6 +164,33 @@ const requestNotificationPermission = async () => {
   return perm === 'granted';
 };
 
+let medAlertAudio = null;
+let medAlertAudioReady = null;
+const ensureMedAlertAudio = () => {
+  if(medAlertAudioReady) return medAlertAudioReady;
+  medAlertAudio = new Audio('audios/Alerta.mp3');
+  medAlertAudio.loop = false;
+  medAlertAudioReady = new Promise(resolve => {
+    const finalize = ok => resolve(ok);
+    medAlertAudio.addEventListener('canplaythrough', () => finalize(true), { once: true });
+    medAlertAudio.addEventListener('error', () => finalize(false), { once: true });
+  });
+  medAlertAudio.load();
+  return medAlertAudioReady;
+};
+
+const playMedicationSound = async () => {
+  const ready = await ensureMedAlertAudio();
+  if(!ready) return false;
+  try {
+    medAlertAudio.currentTime = 0;
+    await medAlertAudio.play();
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
 const notifyMedication = async (title, body) => {
   const ok = await requestNotificationPermission();
   if(ok) {
@@ -172,6 +199,7 @@ const notifyMedication = async (title, body) => {
     alert(`${title}\n${body}`);
   }
   if(navigator.vibrate) navigator.vibrate([200, 80, 200]);
+  await playMedicationSound();
 };
 
 const scheduleMedicationAlarms = (med) => {
@@ -984,10 +1012,6 @@ const NovaMensagem = ({onSend, onBack}) => {
   };
 
   const handleSend = () => {
-    if(!bpStatus || !glucoseStatus || !gestationStatus || !childStatus) {
-      return alert('Responda aos campos obrigatórios do roteiro antes de enviar.');
-    }
-
     const bpValueClean = bpValue.trim();
     const glucoseValueClean = glucoseValue.trim();
     const gestationNotesClean = gestationNotes.trim();
@@ -996,10 +1020,10 @@ const NovaMensagem = ({onSend, onBack}) => {
 
     const resumo = [
       'Roteiro diário do paciente:',
-      `Pressão arterial: ${bpStatus}${bpValueClean ? ` | valor informado: ${bpValueClean}` : ''}`,
-      `Glicemia: ${glucoseStatus}${glucoseValueClean ? ` | valor informado: ${glucoseValueClean}` : ''}`,
-      `Gestação: ${gestationStatus}${gestationNotesClean ? ` | detalhes: ${gestationNotesClean}` : ''}`,
-      `Saúde da criança: ${childStatus}${childNotesClean ? ` | detalhes: ${childNotesClean}` : ''}`
+      `Pressão arterial: ${bpStatus || 'Não informado'}${bpValueClean ? ` | valor informado: ${bpValueClean}` : ''}`,
+      `Glicemia: ${glucoseStatus || 'Não informado'}${glucoseValueClean ? ` | valor informado: ${glucoseValueClean}` : ''}`,
+      `Gestação: ${gestationStatus || 'Não informado'}${gestationNotesClean ? ` | detalhes: ${gestationNotesClean}` : ''}`,
+      `Saúde da criança: ${childStatus || 'Não informado'}${childNotesClean ? ` | detalhes: ${childNotesClean}` : ''}`
     ].join('\n');
 
     const textoFinal = txtClean ? `${resumo}\n\nObservações adicionais: ${txtClean}` : resumo;
@@ -1033,18 +1057,18 @@ const NovaMensagem = ({onSend, onBack}) => {
         <div className="flex items-center justify-between gap-2 mb-1">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-700 font-bold">Roteiro Guiado</p>
-            <h3 className="text-lg font-extrabold text-emerald-900">Preencha antes de enviar</h3>
+            <h3 className="text-lg font-extrabold text-emerald-900">Preencha corretamente com seus dados</h3>
           </div>
-          <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">Obrigatório</span>
+          <span className="text-[11px] font-bold text-emerald-700 bg-white px-3 py-1 rounded-full border border-emerald-200">Preencha o que souber</span>
         </div>
-        <p className="text-sm text-emerald-900">Selecione a opção que mais se aproxima da sua situação. Não precisa saber números: escolha a melhor resposta e, se souber, complete no campo de texto.</p>
+        <p className="text-sm text-emerald-900">Escolha a opção que melhor descreve sua situação. Se não souber ou não se aplica, deixe em branco ou selecione “Não se aplica”.</p>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto pb-2">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="section-title mb-0">Pressão Arterial</div>
-            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+            <span className="text-[11px] font-bold text-emerald-700">Preencha corretamente com seus dados</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <OptionButton label="Não medi hoje" description="Sem acesso ao aparelho ou não conseguiu medir" selected={bpStatus==='Não medi hoje'} onClick={()=>setBpStatus('Não medi hoje')} />
@@ -1058,7 +1082,7 @@ const NovaMensagem = ({onSend, onBack}) => {
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="section-title mb-0">Glicemia</div>
-            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+            <span className="text-[11px] font-bold text-emerald-700">Preencha corretamente com seus dados</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <OptionButton label="Não medi hoje" description="Sem aparelho ou fita disponível" selected={glucoseStatus==='Não medi hoje'} onClick={()=>setGlucoseStatus('Não medi hoje')} />
@@ -1072,7 +1096,7 @@ const NovaMensagem = ({onSend, onBack}) => {
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="section-title mb-0">Gestação</div>
-            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+            <span className="text-[11px] font-bold text-emerald-700">Preencha corretamente com seus dados</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <OptionButton label="Não estou gestante / não se aplica" selected={gestationStatus==='Não gestante ou não se aplica'} onClick={()=>setGestationStatus('Não gestante ou não se aplica')} />
@@ -1085,7 +1109,7 @@ const NovaMensagem = ({onSend, onBack}) => {
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="section-title mb-0">Saúde da Criança</div>
-            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+            <span className="text-[11px] font-bold text-emerald-700">Preencha corretamente com seus dados</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <OptionButton label="Não se aplica / sem crianças" selected={childStatus==='Não se aplica / sem crianças'} onClick={()=>setChildStatus('Não se aplica / sem crianças')} />
