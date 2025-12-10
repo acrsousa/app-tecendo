@@ -1,0 +1,3206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Tecendo Saúde</title>
+
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  /* DESIGN SYSTEM */
+  :root { --primary: #15803d; --bg: #f0fdf4; --text: #0f172a; }
+  body { background: var(--bg); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text); margin: 0; -webkit-tap-highlight-color: transparent; }
+
+  /* Animações */
+  .fade-in { animation: fadeIn 0.3s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Botões */
+  .btn-primary {
+    width: 100%; padding: 18px; background: linear-gradient(135deg, #16a34a 0%, #14532d 100%);
+    color: #fff; border-radius: 14px; font-weight: 800; font-size: 16px; border: none; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:active { transform: scale(0.98); box-shadow: none; }
+
+  .btn-sec {
+    width: 100%; padding: 14px; background: #fff; color: #475569; border: 1px solid #cbd5e1;
+    border-radius: 14px; font-weight: 700; cursor: pointer;
+  }
+
+  /* Inputs */
+  .input-box, select, textarea {
+    width: 100%; padding: 16px; border-radius: 12px; border: 1px solid #cbd5e1;
+    background: #fff; font-size: 16px; outline: none; margin-bottom: 12px; appearance: none;
+  }
+  .input-box:focus { border-color: var(--primary); box-shadow: 0 0 0 2px #bbf7d0; }
+
+  /* Cards */
+  .card { background: #fff; padding: 16px; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); margin-bottom: 12px; border: 1px solid #f1f5f9; }
+  
+  /* Badges */
+  .badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+  .badge-pendente { background: #fee2e2; color: #991b1b; }
+  .badge-ok { background: #dcfce7; color: #166534; }
+
+  /* Mídia Buttons */
+  .media-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .btn-media {
+    flex: 1; padding: 12px; background: #f8fafc; border-radius: 12px; border: 2px solid transparent;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #64748b; cursor: pointer; position: relative; overflow: hidden;
+  }
+  .btn-media.active { background: #dcfce7; border-color: #16a34a; color: #166534; }
+  .hidden-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 10; }
+
+  /* Utils */
+  .section-title { font-size: 13px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin: 24px 0 8px 0; letter-spacing: 1px; }
+  .loading { position: fixed; inset: 0; background: rgba(255,255,255,0.9); z-index: 99; display: flex; align-items: center; justify-content: center; flex-direction: column; font-weight: 700; color: var(--primary); }
+  .sync-float { position: fixed; bottom: 20px; right: 20px; background: #0f172a; color: #fff; padding: 8px 16px; border-radius: 30px; font-size: 11px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  
+  /* Thumbnails */
+  .thumb { width: 60px; height: 60px; border-radius: 8px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; border: 1px solid #e2e8f0; font-size: 24px; cursor: pointer; }
+  
+  /* Dashboard Pro Buttons */
+  .big-btn {
+    width: 100%; padding: 30px; background: #fff; border-radius: 20px; border: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; align-items: center; gap: 12px; cursor: pointer;
+    box-shadow: 0 4px 6px -2px rgba(0,0,0,0.02); margin-bottom: 16px;
+  }
+  .big-btn-icon { font-size: 32px; background: #dcfce7; width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+
+// 1. CONFIGURAÇÃO SUPABASE
+const SUPABASE_URL = 'https://rucpqwojmgnqibeskaaj.supabase.co'; 
+const SUPABASE_KEY = 'sb_publishable_sBflW42mIzVo835NoMrsjw_uYvlCR8z';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const {useState,useEffect,useRef,useMemo,useCallback}=React;
+
+const db = new Dexie('TecendoSaudeDB_V22_Fixed');
+// v1 já existia sem foto_url; v2 adiciona foto_url
+db.version(1).stores({
+  perfil:'++id,patientId,synced, nome, cpf, nascimento, regiao, ubs_referencia, genero, raca, endereco, telefone, escolaridade, profissao, mora_sozinho, acs_responsavel, hipertensao, diabetes, vicios, tempo_vicio, altura, peso_inicial, enxerga_bem, consulta_oftalmo, uso_medicacoes, atividade_fisica, freq_atividade, tipo_atividade, meta_peso, meta_glicemia, meta_pa_min, meta_pa_max',
+  registros:'++id,registroId,patientId,deviceId,createdAt,updatedAt,status,synced',
+  midias:'++id,registroId,name,type,synced'
+});
+db.version(3).stores({
+  perfil:'++id,patientId,synced,nome,cpf,nascimento,regiao,foto_url,ubs_referencia,genero,raca,endereco,telefone,escolaridade,profissao,mora_sozinho,acs_responsavel,hipertensao,diabetes,vicios,tempo_vicio,altura,peso_inicial,enxerga_bem,consulta_oftalmo,uso_medicacoes,atividade_fisica,freq_atividade,tipo_atividade,meta_peso,meta_glicemia,meta_pa_min,meta_pa_max',
+  registros:'++id,registroId,patientId,deviceId,createdAt,updatedAt,status,synced',
+  midias:'++id,registroId,name,type,synced',
+  medicamentos: '++id,medicationId,patientId,synced,tipo_medicamento,nome_medicamento,dosagem,horarios,data_prescricao,data_dispensacao,data_inicio,data_termino,ativo'
+}).upgrade(tx => {
+    return tx.table('perfil').toCollection().modify(p => { if(!p.foto_url) p.foto_url = ''; });
+});
+
+// 2. DADOS
+const LISTA_UBS = ["UBS Antônio Evangelista", "UBS Boa Esperança", "UBS Divinópolis", "UBS Márcio Marinho", "UBS Haroldo Martins", "UBS Maria Bibiana da Silva", "UBS Nadime Miranda", "UBS Neli Loeblein", "UBS Vicente Alves da Silva"];
+const LISTA_REGIOES = ["Santarém", "Belterra", "Mojuí dos Campos", "Alenquer", "Curuá", "Óbidos", "Oriximiná", "Terra Santa", "Faro", "Juruti", "Monte Alegre", "Almeirim", "Prainha"];
+const LISTA_ACS = ["Acsa Kelly Gelio de Sá Lucena","Adriano Grings de Abreu","Cleonice Fabiano","Cleudes Meireles do Prado","Daniella de Almeida Santos","Edvânia Barbosa Sousa","Eliane Sousa Matos","Eliselma Alves Barreto","Elizângela Guedes Moura","Érica Sousa Scalabrim","Erika Sousa Duarte","Francisca Deneide França da Silva","Glaucione Santos Brito","Lourdes Dallabrida Rech","Luzineide Brito dos Santos","Marisane Aparecida Facioni","Paulo Afonso Borges da Silva","Raimunda de Souza Brandão","Robson Lima de Oliveira","Silvana Cardoso Ott","Silvana de Sousa Silva","Silvana Ferreira de Almeida","Vânea Pereira Scalabrin","Antonio Benigno de Freita","Antonio Pereira Correa","Auzenira Carvalho Cunha","Célia Alves Cruz","Elzana Lopes de Castro","Eudilene Vitor Gomes Matos","Evando Oliveira Santos","Fabiana Gomes Peixoto","Geizeane Maria das G. Sales","Genival Rodrigues Marinho","Hosana Lopes de Castro","Josias Martins de Oliveira","Léia de Souza Alves","Maria da Conceição dos Santos Ribeiro","Maria de Andrade Lima","Maria Elismar Bezerra Barbosa","Rita Delmondes Ferreira","Valdemir Machado de Alegor","Alzilene Braga","Ariane do Nascimento da Silva","Claudiléia de Sousa Castro","Edi Alves de Barros","Elaine Soares de Sousa","Ivanete Teixeira Silva","Ivonete Henz","Natividade Pereira de Aguiar","Regilene Hecki da Costa","Jackeline Paiva Batista","Juliana Lisboa","Aucineia Moreira Galvão","Edicínia Rabelo Lourido","Katya Cruz de Sousa","Regiane Lira da Silva","Cláudio José Gonçalves Marques","Elinete Cunha de Sousa","Hiranildes Ramos Pereira","Joelma Costa Castro","José Antonio Sousa de Menezes","Manoel Edinaldo Rodrigues Oliveira","Márcio José Oliveira Figueira","Maria de Lourdes Pinto Costa","Maria Selma Figueira Costa","Mariane Ferreira Castro","Nelma Isabel Marinho Figueira","Orlandino Manoel dos Santos Costa","Vaneila de Siqueira Gamboa","Claudenira Pena Viegas","Jacymar Silva de Brito","Maria Gracinete Lima Fróes","Mariza Damião Lopes","Ana Célia de Oliveira","Benedito Neris dos Santos","Celina de Sousa","Cícera Maria da Silva","Eliana Carvalho da Silva","Jacilene da Silva Oliveira","Jucineide da Silva Farias","Leidaiane da Silva Bentes","Lucia de Fátima Farias","Luciana da Silva Santos","Luciene da Silva Santos","Manoel Messias da Silva","Maria de Nazaré Rodrigues da Silva","Maria do Socorro da Silva","Maria Liduina de Sousa","Marilene de Sousa Santos","Meire Luci dos Santos Oliveira","Mirian dos Santos Oliveira","Neuza de Fátima Alves da Silva","Rosangela Maria da Silva","Rosinete da Silva Santos","Sandra da Silva Rebelo","Silvia Helena de Oliveira","Simone da Silva Bentes","Valdenice da Silva dos Santos","Valdete da Silva Costa","Vera Lúcia de Sousa Castro"];
+const MEDICATION_TYPES = [
+  'Analgésicos',
+  'Anti-inflamatórios (AINEs)',
+  'Corticoides',
+  'Antibióticos',
+  'Antifúngicos',
+  'Antivirais',
+  'Anti-hipertensivos',
+  'Antidiabéticos',
+  'Anticoagulantes',
+  'Antidepressivos',
+  'Ansiolíticos',
+  'Antialérgicos',
+  'Broncodilatadores',
+  'Antiácidos',
+  'Hipolipidemiantes',
+  'Relaxantes musculares',
+  'Não faz uso'
+];
+const MEDICATION_TIMES = ['05:00','06:00','07:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00','22:00','23:00'];
+const EMPTY_MEDICATION_FORM = {
+  nome: '',
+  tipo: '',
+  dosagem: '',
+  horarios: [],
+  data_prescricao: '',
+  data_dispensacao: '',
+  data_inicio: '',
+  data_termino: '',
+  ativo: true
+};
+
+const mascaraCPF = v => v.replace(/\D/g,'').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})/,'$1-$2').replace(/(-\d{2})\d+?$/,'$1');
+const mascaraData = v => v.replace(/\D/g,'').replace(/(\d{2})(\d)/,'$1/$2').replace(/(\d{2})(\d)/,'$1/$2').replace(/(\d{4})\d+?$/,'$1');
+const mascaraTelefone = v => {
+  const nums = v.replace(/\D/g,'');
+  if(nums.length <= 10) return nums.replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{4})(\d)/,'$1-$2');
+  return nums.replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').replace(/(\d{4})\d+?$/,'$1');
+};
+const calcAge = d => { if(!d) return ''; const y = d.split('/').reverse().join('-'); const diff = Date.now() - new Date(y).getTime(); return Math.floor(diff/(31557600000)) + ' anos'; };
+const normalizeDateInput = raw => {
+  if(!raw) return '';
+  const str = String(raw).trim();
+  if(!str) return '';
+  if(str.includes('T')) return normalizeDateInput(str.split('T')[0]);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [year, month, day] = str.split('-');
+    return `${day}/${month}/${year}`;
+  }
+  return str;
+};
+const isMedicationActiveValue = value => {
+  if(value === null || value === undefined) return true;
+  const normalized = String(value).trim().toLowerCase();
+  if(!normalized) return true;
+  return !(/^(nao|não|inativo|encerrado|0|false)/.test(normalized));
+};
+const patientUsesMedication = raw => {
+  if(raw === null || raw === undefined) return false;
+  const normalized = String(raw).trim().toLowerCase();
+  if(!normalized) return false;
+  if(/^(nao|não|nenhum|sem|zero)/.test(normalized)) return false;
+  if(normalized.includes('sim')) return true;
+  if(normalized.includes('usa') || normalized.includes('faz uso') || normalized.includes('toma')) return true;
+  if(['1','true','yes'].includes(normalized)) return true;
+  return false;
+};
+function formatDateISO(iso){try{return new Date(iso).toLocaleString('pt-BR')}catch(e){return iso||''}}
+function formatDuration(seconds){
+  const s = Math.max(0, Math.round(seconds||0));
+  const m = Math.floor(s/60); const r = s%60;
+  return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`;
+}
+function uuidv4(){return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16))}
+const fileToDataUrl = (file)=> new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); });
+
+// 3. SYNC ENGINE
+async function syncManager() {
+  if (!navigator.onLine) return;
+  try {
+    const PERFIL_SYNC_COLUMNS = [
+      'patient_id','nome','cpf','nascimento','regiao','foto_url','ubs_referencia','genero','raca','endereco',
+      'telefone','escolaridade','profissao','mora_sozinho','acs_responsavel','hipertensao','diabetes','vicios',
+      'tempo_vicio','altura','peso_inicial','enxerga_bem','consulta_oftalmo','uso_medicacoes','atividade_fisica',
+      'freq_atividade','tipo_atividade','meta_peso','meta_glicemia','meta_pa_min','meta_pa_max'
+    ];
+    const perfis = await db.perfil.where('synced').equals(0).toArray();
+    for (const p of perfis) {
+      const { id, synced, patientId, ...rest } = p;
+      const base = { patient_id: patientId || ('local-'+id) };
+      PERFIL_SYNC_COLUMNS.forEach(k => {
+        const keyLocal = k === 'patient_id' ? 'patientId' : k;
+        if (keyLocal in rest && rest[keyLocal] !== '' && rest[keyLocal] != null) {
+          base[k] = rest[keyLocal];
+        }
+      });
+      if (base.cpf) base.cpf = String(base.cpf).replace(/\D/g,'');
+      const nowIso = new Date().toISOString();
+      if (!rest.created_at) base.created_at = nowIso;
+      base.updated_at = nowIso;
+      await supabase.from('perfis').upsert(base, { onConflict: 'patient_id' });
+      await db.perfil.update(p.id, { synced: 1 });
+    }
+
+    const regs = await db.registros.where('synced').equals(0).toArray();
+    for (const r of regs) {
+      await supabase.from('registros').upsert({
+        registro_id: r.registroId,
+        patient_id: r.patientId,
+        device_id: r.deviceId,
+        texto: r.texto,
+        tipo: r.tipo,
+        status: r.status,
+        replies_json: r.replies || [],
+        created_at: r.createdAt,
+        updated_at: r.updatedAt
+      }, { onConflict: 'registro_id' });
+      await db.registros.update(r.id, { synced: 1 });
+    }
+
+    const mids = await db.midias.where('synced').equals(0).toArray();
+    for (const m of mids) {
+      const fileName = `${m.registroId}/${m.name.replace(/[^a-zA-Z0-9.]/g,'_')}`;
+      await supabase.storage.from('midias').upload(fileName, m.blob || m.blob, { upsert: true });
+      await db.midias.update(m.id, { synced: 1 });
+    }
+  } catch (e) { /* silenciar erros de sync */ }
+}
+
+const SyncIndicator = () => {
+  const [p, setP] = useState(0);
+  useEffect(() => {
+    const loop = setInterval(async () => {
+      const c1 = await db.registros.where('synced').equals(0).count();
+      const c2 = await db.midias.where('synced').equals(0).count();
+      setP(c1 + c2);
+      if(navigator.onLine && (c1+c2)>0) syncManager();
+    }, 5000);
+    return () => clearInterval(loop);
+  }, []);
+  if(p === 0) return null;
+  return <div className="sync-float"><div className="dot-pulse"></div> Sincronizando {p}...</div>;
+}
+
+const Loading = ({text}) => <div className="loading"><div className="text-4xl mb-4">🌿</div><div>{text}</div></div>;
+
+// Modal para expandir mídia em tela cheia
+const MediaModal = ({url, type, onClose}) => {
+  return (
+    <div className="modal-bg" onClick={onClose} style={{zIndex: 9999}}>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4" onClick={e=>e.stopPropagation()}>
+        <div className="bg-white rounded-2xl p-4 max-w-4xl w-full max-h-[90vh] overflow-auto shadow-2xl">
+          <div className="flex justify-end mb-3">
+            <button className="btn-sec w-auto px-6 py-2 text-sm font-bold" onClick={onClose}>✕ Fechar</button>
+          </div>
+          {(type === 'image' || type?.startsWith('image') || !type) && <img src={url} alt="mídia" className="w-full rounded-lg" />}
+          {(type === 'video' || type?.startsWith('video') || type === 'video/mp4') && (
+            <video controls src={url} className="w-full rounded-lg bg-black" autoPlay style={{maxHeight: '70vh'}} />
+          )}
+          {(type === 'audio' || type?.startsWith('audio')) && (
+            <div className="p-10 text-center">
+              <div className="text-6xl mb-4">🎵</div>
+              <audio controls src={url} className="w-full" autoPlay />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Thumbnail para registros do paciente
+const RegistroThumb = ({registroId}) => {
+  const [url, setUrl] = useState('');
+  const urlRef = useRef('');
+  useEffect(() => {
+    let active = true;
+    if(urlRef.current){ URL.revokeObjectURL(urlRef.current); urlRef.current=''; }
+    setUrl('');
+    (async () => {
+      const media = await db.midias.where('registroId').equals(registroId).toArray();
+      const first = media.find(m => m.type?.startsWith('image')) || media[0];
+      if(first && active){
+        const objectUrl = URL.createObjectURL(first.blob || first.blob);
+        urlRef.current = objectUrl;
+        setUrl(objectUrl);
+      }
+    })();
+    return () => {
+      active = false;
+      if(urlRef.current){ URL.revokeObjectURL(urlRef.current); urlRef.current=''; }
+    };
+  }, [registroId]);
+  if(!url) return <div className="thumb">📄</div>;
+  return <img src={url} className="thumb" alt="registro" />;
+};
+
+// Componente para mostrar todas as mídias de um registro
+const MediasDoRegistro = ({registroId, onMediaClick}) => {
+  const [medias, setMedias] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrls = [];
+    
+    const loadMedias = async () => {
+      setLoading(true);
+      try {
+        const mediaList = [];
+        
+        // 1. Buscar LOCALMENTE (IndexedDB) - PRIORITÁRIO
+        const localMedias = await db.midias.where('registroId').equals(registroId).toArray();
+        if(localMedias && localMedias.length > 0) {
+          for(const m of localMedias) {
+            const objectUrl = URL.createObjectURL(m.blob);
+            objectUrls.push(objectUrl);
+            let type = 'image';
+            if(m.type?.startsWith('video')) type = 'video';
+            else if(m.type?.startsWith('audio')) type = 'audio';
+            mediaList.push({ url: objectUrl, type, name: m.name, source: 'local' });
+          }
+        }
+        
+        // 2. Buscar no SUPABASE (se não achou local ou está online)
+        if(mediaList.length === 0 && navigator.onLine) {
+          const { data: files } = await supabase.storage.from('midias').list(registroId);
+          if(files && files.length > 0) {
+            for(const file of files) {
+              const { data } = supabase.storage.from('midias').getPublicUrl(`${registroId}/${file.name}`);
+              const ext = file.name.toLowerCase();
+              let type = 'image';
+              if(['.mp4', '.webm', '.mov', '.avi', '.mkv'].some(e => ext.endsWith(e))) type = 'video';
+              else if(['.mp3', '.wav', '.ogg', '.m4a', '.aac'].some(e => ext.endsWith(e))) type = 'audio';
+              mediaList.push({ url: data.publicUrl, type, name: file.name, source: 'supabase' });
+            }
+          }
+        }
+        
+        if(active) setMedias(mediaList);
+      } catch(e) {
+        console.error('Erro ao carregar mídias:', e);
+      } finally {
+        if(active) setLoading(false);
+      }
+    };
+    
+    loadMedias();
+    
+    return () => { 
+      active = false; 
+      objectUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [registroId]);
+
+  if(loading) return <div className="text-xs text-gray-400">Carregando mídias...</div>;
+  if(medias.length === 0) return <div className="text-xs text-gray-400">Nenhuma mídia anexada</div>;
+
+  return (
+    <div className="space-y-2">
+      {medias.map((media, idx) => (
+        <div key={idx}>
+          {media.type === 'audio' ? (
+            <div className="bg-white p-2 rounded border border-gray-300">
+              <div className="text-[10px] text-gray-500 mb-1 truncate max-w-[200px]">{media.name}</div>
+              <audio controls src={media.url} className="w-full max-w-xs" />
+            </div>
+          ) : media.type === 'video' ? (
+            <div className="bg-white p-2 rounded border border-gray-300">
+              <div className="text-[10px] text-gray-500 mb-1 truncate max-w-[200px]">{media.name}</div>
+              <video controls src={media.url} className="w-full max-w-sm rounded" />
+            </div>
+          ) : (
+            <div className="relative cursor-pointer group inline-block" onClick={()=>onMediaClick(media.url, 'image')}>
+              <img src={media.url} alt={media.name} className="w-24 h-24 object-cover rounded border-2 border-gray-300 hover:border-green-400 transition-colors" />
+              <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-[8px] px-1 py-0.5 truncate">{media.name}</div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const PatientHistoryModal = ({registro, onClose, onUpdated}) => {
+  const [medias, setMedias] = useState([]);
+  const [replyTxt, setReplyTxt] = useState('');
+  const [sending, setSending] = useState(false);
+  const [localReplies, setLocalReplies] = useState(registro.replies || []);
+  const [expandedMedia, setExpandedMedia] = useState(null);
+  const [replyFiles, setReplyFiles] = useState([]);
+  const [recordingAudio, setRecordingAudio] = useState(false);
+  const [recordingMs, setRecordingMs] = useState(0);
+  const recordingTimerRef = useRef(null);
+  const [verifying, setVerifying] = useState(false);
+  const recorderRef = useRef(null);
+  const hasReachedLimit = (localReplies.length || 0) >= 5;
+
+  useEffect(() => {
+    setLocalReplies(registro.replies || []);
+  }, [registro.replies, registro.registroId]);
+
+  useEffect(() => {
+    return () => {
+      replyFiles.forEach(f => { if(f.preview) URL.revokeObjectURL(f.preview); });
+      if(recorderRef.current?.stream) recorderRef.current.stream.getTracks().forEach(t=>t.stop());
+      if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    };
+  }, []);
+
+  const addReplyFile = async (newFile) => {
+    if(!newFile) return;
+
+    setVerifying(true);
+    try {
+      const isVideo = newFile.type.startsWith('video');
+      const isImage = newFile.type.startsWith('image');
+      const isAudio = newFile.type.startsWith('audio');
+
+      if (isImage) {
+        const MAX_SIZE = 1 * 1024 * 1024; // 1MB
+        if (newFile.size > MAX_SIZE) throw new Error('A imagem é muito grande. O tamanho máximo é de 1MB.');
+      } else if (isAudio || isVideo) {
+        const MAX_DURATION = 60; // 1 minute
+        const duration = await getMediaDuration(newFile);
+        if (duration > MAX_DURATION) {
+          const mediaType = isAudio ? 'áudio' : 'vídeo';
+          throw new Error(`O ${mediaType} é muito longo. A duração máxima é de 1 minuto.`);
+        }
+        const preview = URL.createObjectURL(newFile);
+        setReplyFiles(prev => [...prev, {file: newFile, preview, duration}]);
+        return;
+      }
+      const preview = URL.createObjectURL(newFile);
+      setReplyFiles(prev => [...prev, {file: newFile, preview, duration: null}]);
+
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const removeReplyFile = idx => {
+    const removed = replyFiles[idx];
+    if(removed.preview) URL.revokeObjectURL(removed.preview);
+    setReplyFiles(prev => prev.filter((_,i) => i !== idx));
+  };
+
+  const handleReplyFilePick = e => {
+    const picked = e.target.files[0];
+    if(picked) addReplyFile(picked);
+    e.target.value = null;
+  };
+
+  const startReplyAudioRecording = async () => {
+    if(!navigator.mediaDevices?.getUserMedia) return alert('Microfone não disponível.');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type:'audio/webm' });
+        const audioFile = new File([blob], `patient_audio_${Date.now()}.webm`, { type:'audio/webm' });
+        addReplyFile(audioFile);
+        stream.getTracks().forEach(t=>t.stop());
+        recorderRef.current = null;
+        setRecordingAudio(false);
+        setRecordingMs(0);
+        if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      };
+      recorder.start();
+      setRecordingMs(0);
+      if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(()=>{
+        setRecordingMs(ms => {
+          const next = ms + 200;
+          if(next >= 60000) {
+            recorder.stop();
+            return 60000;
+          }
+          return next;
+        });
+      },200);
+      recorderRef.current = { recorder, stream };
+      setRecordingAudio(true);
+    } catch(e) {
+      alert('Não foi possível gravar áudio.');
+    }
+  };
+
+  const stopReplyAudioRecording = () => {
+    if(recorderRef.current?.recorder) recorderRef.current.recorder.stop();
+  };
+
+  useEffect(() => {
+    let urls = [];
+    (async () => {
+      const list = await db.midias.where('registroId').equals(registro.registroId).toArray();
+      urls = list.map(item => ({...item, url: URL.createObjectURL(item.blob || item.blob)}));
+      setMedias(urls);
+    })();
+    return () => { urls.forEach(m => m.url && URL.revokeObjectURL(m.url)); };
+  }, [registro.registroId]);
+
+  const handleReply = async () => {
+    if(!replyTxt && replyFiles.length === 0) return alert('Digite uma mensagem ou anexe mídia');
+    if(hasReachedLimit) return alert('Limite de 5 interações atingido. Aguarde o profissional. Máximo: 5 trocas.');
+    setSending(true);
+    try {
+      const urls = [];
+      if(navigator.onLine && replyFiles.length > 0) {
+        for(const item of replyFiles) {
+          const path = `${registro.registroId}/patient_${Date.now()}_${item.file.name}`;
+          await supabase.storage.from('midias').upload(path, item.file);
+          const {data} = supabase.storage.from('midias').getPublicUrl(path);
+          urls.push(data.publicUrl);
+        }
+      }
+      
+      const reg = await db.registros.where('registroId').equals(registro.registroId).first();
+      const newReply = { 
+        from:'paciente', 
+        text: replyTxt, 
+        urls: urls,
+        at: new Date().toISOString() 
+      };
+      const updatedReplies = (reg.replies || []).concat(newReply);
+      await db.registros.where('registroId').equals(registro.registroId).modify({
+        replies: updatedReplies,
+        updatedAt: new Date().toISOString(),
+        notificationForPro: true,
+        synced: 0
+      });
+      setLocalReplies(updatedReplies);
+      setReplyTxt('');
+      setReplyFiles([]);
+      syncManager();
+      onUpdated?.();
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const lastProfReply = [...localReplies].filter(r => r.from === 'pro').slice(-1)[0];
+  
+  const hasVideo = replyFiles.some(f => f.file.type.startsWith('video'));
+  const hasImage = replyFiles.some(f => f.file.type.startsWith('image'));
+  const hasAudio = replyFiles.some(f => f.file.type.startsWith('audio'));
+
+  return (
+    <>
+      {expandedMedia && <MediaModal url={expandedMedia.url} type={expandedMedia.type} onClose={()=>setExpandedMedia(null)} />}
+      <div className="modal-bg">
+      <div className="bg-white rounded-2xl p-5 max-w-lg w-full max-h-[90vh] overflow-auto">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-xl font-bold">Detalhes do Registro</h3>
+          <button className="btn-sec w-auto px-3 py-1 text-xs" onClick={onClose}>Fechar</button>
+        </div>
+        <div className="text-xs text-gray-500 mb-1">{formatDateISO(registro.createdAt)}</div>
+        <div className="font-semibold text-lg mb-3">{registro.texto || 'Sem texto (apenas mídia)'}</div>
+        {lastProfReply && (
+          <div className="bg-emerald-50 border border-emerald-100 text-emerald-900 rounded-xl p-3 mb-4">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-600 font-bold mb-1">Profissional responsável</div>
+            <div className="text-sm font-semibold">{lastProfReply.pro_name || 'Profissional'}</div>
+            {lastProfReply.pro_ubs && <div className="text-xs opacity-80">{lastProfReply.pro_ubs}</div>}
+          </div>
+        )}
+        {medias.length>0 && (
+          <div className="space-y-3 mb-4">
+            {medias.map(m => (
+              <div key={m.id} className="bg-slate-50 p-3 rounded-xl">
+                {m.type?.startsWith('image') && <img src={m.url} alt={m.name} className="w-full max-w-sm rounded" />}
+                {m.type?.startsWith('video') && <video controls src={m.url} className="w-full max-w-sm rounded" />}
+                {m.type?.startsWith('audio') && <audio controls src={m.url} className="w-full max-w-xs" />}
+                {!m.type && <a href={m.url} download={m.name} className="text-blue-600 underline text-sm">{m.name}</a>}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="section-title">Interações</div>
+        <div className="space-y-2 mb-4">
+          {localReplies.map((r, idx) => {
+            const allUrls = r.urls && Array.isArray(r.urls) ? r.urls : (r.url ? [r.url] : []);
+            return (
+            <div key={idx} className={`p-3 rounded-xl ${r.from==='pro'?'bg-green-100 ml-auto text-right':'bg-slate-100'}`}>
+              <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">{r.from==='pro' ? (r.pro_name || 'PROFISSIONAL') : 'VOCÊ'}</div>
+              <div>{r.text}</div>
+              {allUrls.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {allUrls.map((url, i) => {
+                    const isVideo = ['.mp4', '.webm', '.mov', '.avi', '.mkv', 'video'].some(e => url.includes(e));
+                    const isAudio = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', 'audio'].some(e => url.includes(e));
+                    if(isAudio) {
+                      return <audio key={i} controls src={url} className="w-full max-w-xs" />;
+                    }
+                    if(isVideo) {
+                      return <video key={i} controls src={url} className="w-full max-w-sm rounded border-2 border-gray-300" />;
+                    }
+                    return (
+                      <img key={i} src={url} alt="foto" className="max-w-[200px] rounded border-2 border-gray-300 cursor-pointer hover:border-green-400 transition-colors" onClick={()=>setExpandedMedia({url, type: 'image'})} />
+                    );
+                  })}
+                </div>
+              )}
+              <div className="text-[10px] text-gray-400 mt-1">{formatDateISO(r.at)}</div>
+            </div>
+            );
+          })}
+          {localReplies.length===0 && <div className="text-xs text-gray-400">Nenhuma interação ainda.</div>}
+        </div>
+        {!hasReachedLimit && (
+          <>
+            <div className="section-title text-xs">Anexar Mídia (opcional)</div>
+            <p className="text-xs text-gray-500 mb-3" dangerouslySetInnerHTML={{ __html: 'Você pode enviar <b>ou</b> um vídeo (máx 1 min), <b>ou</b> uma foto (máx 1MB) e um áudio (máx 1 min).' }} />
+            <div className="media-row mb-3 flex-wrap">
+              <label className={`btn-media text-xs ${hasVideo || hasImage ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                📷 Foto
+                <input type="file" accept="image/*" capture="environment" className="hidden-input" onChange={handleReplyFilePick} disabled={hasVideo || hasImage}/>
+              </label>
+              <label className={`btn-media text-xs ${hasVideo || hasImage || hasAudio ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                🎥 Vídeo
+                <input type="file" accept="video/*" capture="environment" className="hidden-input" onChange={handleReplyFilePick} disabled={hasVideo || hasImage || hasAudio}/>
+              </label>
+              <button type="button" className={`btn-media text-xs ${recordingAudio?'active':''} ${hasVideo || hasAudio ? 'opacity-50 cursor-not-allowed' : ''}`} onClick={()=> recordingAudio ? stopReplyAudioRecording() : startReplyAudioRecording()} disabled={hasVideo || hasAudio}>
+                {recordingAudio?'⏹️ Parar':'🎙️ Gravar'}
+              </button>
+            </div>
+            {recordingAudio && <div className="text-xs text-amber-700 font-semibold mb-2">Tempo: {formatDuration(recordingMs/1000)} / 01:00</div>}
+            {verifying && <div className="text-center text-gray-500 my-2">Verificando arquivo...</div>}
+            {replyFiles.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {replyFiles.map((item, idx) => (
+                  <div key={idx} className="bg-green-50 p-2 rounded border border-green-200 text-xs">
+                    <div className="font-bold text-green-700">{item.file.name}</div>
+                    {item.duration != null && <div className="text-[11px] text-slate-600">Duração: {formatDuration(item.duration)}</div>}
+                    {item.file.type.startsWith('audio') && <audio controls src={item.preview} className="w-full max-w-xs mt-1" />}
+                    {item.file.type.startsWith('video') && <video controls src={item.preview} className="w-full max-w-sm mt-1 rounded" />}
+                    {item.file.type.startsWith('image') && <img src={item.preview} alt="preview" className="w-full max-w-sm mt-1 rounded" />}
+                    <button className="btn-sec mt-1 text-xs py-1" onClick={()=>removeReplyFile(idx)}>Remover</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        <textarea className="input-box" placeholder={hasReachedLimit ? 'Limite atingido' : 'Digite resposta ao profissional'} value={replyTxt} onChange={e=>setReplyTxt(e.target.value)} disabled={hasReachedLimit} />
+        <button className="btn-primary" disabled={hasReachedLimit || sending || verifying} onClick={handleReply}>{verifying ? 'VERIFICANDO...' : (hasReachedLimit?'LIMITE ATINGIDO':'RESPONDER')}</button>
+      </div>
+    </div>
+    </>
+  );
+};
+
+// -----------------------------------------------------------------------------
+// COMPONENTES ISOLADOS (EVITAR ERRO DE HOOKS)
+// -----------------------------------------------------------------------------
+
+// LOGIN PACIENTE
+const PatientLogin = ({onLogin, onRegister}) => {
+  const [cpf, setCpf] = useState('');
+  const [msg, setMsg] = useState('');
+  const [checking, setChecking] = useState(false);
+  const tryLogin = async () => {
+    if(!cpf){ setMsg('Digite o CPF.'); return; }
+    setChecking(true); setMsg('Verificando...');
+    const clean = cpf.replace(/\D/g,'');
+    const local = await db.perfil.where('cpf').equals(clean).first();
+    if(local){
+      setMsg('Perfil local encontrado. Entrando...');
+      setTimeout(()=>onLogin(cpf),300);
+    } else if(navigator.onLine){
+      try {
+        const { data } = await supabase
+          .from('perfis')
+          .select('patient_id, nome, cpf, regiao')
+          .eq('cpf', clean)
+          .maybeSingle(); // evita 406
+        if(data){
+          await db.perfil.add({ nome:data.nome, cpf:data.cpf, regiao:data.regiao||'', patientId:data.patient_id, synced:1 });
+          setMsg('Perfil remoto sincronizado.');
+          setTimeout(()=>onLogin(cpf),300);
+        } else {
+          setMsg('CPF não encontrado. Cadastre-se.');
+          setTimeout(()=>onRegister(cpf),800);
+        }
+      } catch {
+        setMsg('Erro de conexão. Cadastre-se offline.');
+        setTimeout(()=>onRegister(cpf),800);
+      }
+    } else {
+      setMsg('Offline: CPF não existe local. Cadastre-se.');
+      setTimeout(()=>onRegister(cpf),800);
+    }
+    setChecking(false);
+  };
+  return (
+    <div className="p-6 fade-in pt-20">
+      <h2 className="text-2xl font-bold mb-2">Acesso Paciente</h2>
+      <p className="text-gray-500 mb-6">Digite seu CPF para entrar</p>
+      <input className="input-box" value={cpf} onChange={e=>setCpf(mascaraCPF(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" />
+      <button className="btn-primary mb-3" disabled={checking} onClick={tryLogin}>{checking?'VERIFICANDO...':'ENTRAR'}</button>
+      {msg && <div className="text-xs font-bold text-center mb-3 text-green-700 bg-green-50 p-2 rounded-lg border border-green-200">{msg}</div>}
+      <button className="btn-sec" onClick={()=>onRegister('')}>Não tenho cadastro</button>
+    </div>
+  );
+};
+
+// CADASTRO RÁPIDO PACIENTE (apenas campos básicos)
+const CadastroRapido = ({cpfInicial, onFinish, onCancel}) => {
+  const [f, setF] = useState({
+    nome:'', cpf:cpfInicial, nascimento:'', regiao:'', telefone:'', email:''
+  });
+  const salvar = async () => {
+    if(!f.nome || !f.cpf || !f.nascimento || !f.regiao || !f.telefone) {
+      return alert('Preencha todos os campos obrigatórios (Nome, CPF, Data Nascimento, Região e Telefone).');
+    }
+    const clean = f.cpf.replace(/\D/g,'');
+    const basicProfile = {
+      nome: f.nome,
+      cpf: clean,
+      nascimento: f.nascimento,
+      regiao: f.regiao,
+      telefone: f.telefone,
+      email: f.email || '',
+      patientId: 'cpf-'+clean,
+      synced: 0
+    };
+    const id = await db.perfil.add(basicProfile);
+    const p = await db.perfil.get(id);
+    localStorage.setItem('currentProfileId', p.patientId);
+    syncManager();
+    onFinish(p);
+  };
+  return (
+    <div className="p-6 fade-in">
+      <h2 className="text-2xl font-bold mb-4">Cadastro Básico</h2>
+      <p className="text-gray-500 text-sm mb-6">Informe seus dados principais. O profissional de saúde completará seu prontuário.</p>
+      
+      <div className="section-title">Nome completo *</div>
+      <input className="input-box" value={f.nome} onChange={e=>setF({...f,nome:e.target.value})} placeholder="Nome completo" />
+      
+      <div className="section-title">CPF *</div>
+      <input className="input-box" value={f.cpf} onChange={e=>setF({...f,cpf:mascaraCPF(e.target.value)})} placeholder="000.000.000-00" inputMode="numeric" maxLength={14} />
+      
+      <div className="section-title">Data de Nascimento *</div>
+      <input className="input-box" value={f.nascimento} onChange={e=>setF({...f,nascimento:mascaraData(e.target.value)})} placeholder="DD/MM/AAAA" inputMode="numeric" maxLength={10} />
+      
+      <div className="section-title">Região onde mora *</div>
+      <select className="input-box" value={f.regiao} onChange={e=>setF({...f,regiao:e.target.value})}>
+        <option value="">Escolha sua região...</option>
+        {LISTA_REGIOES.map(r => <option key={r}>{r}</option>)}
+      </select>
+      
+      <div className="section-title">Telefone *</div>
+      <input className="input-box" value={f.telefone} onChange={e=>setF({...f,telefone:mascaraTelefone(e.target.value)})} placeholder="(91) 98765-4321" inputMode="tel" />
+      
+      <div className="section-title">Email (opcional)</div>
+      <input className="input-box" value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="seuemail@exemplo.com" inputMode="email" />
+      
+      <button className="btn-primary mt-4" onClick={salvar}>SALVAR E ENTRAR</button>
+      <button className="btn-sec mt-3" onClick={onCancel}>Voltar</button>
+    </div>
+  );
+};
+
+const getMediaDuration = (file) => {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const media = document.createElement(file.type.startsWith('video') ? 'video' : 'audio');
+    media.preload = 'metadata';
+    media.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(media.duration);
+    };
+    media.onerror = (e) => {
+      URL.revokeObjectURL(url);
+      console.error(e);
+      reject(new Error('Não foi possível ler a duração da mídia.'));
+    };
+    media.src = url;
+  });
+};
+
+const NovaMensagem = ({onSend, onBack}) => {
+  const [txt, setTxt] = useState('');
+  const [files, setFiles] = useState([]);
+  const [recordingAudio, setRecordingAudio] = useState(false);
+  const [recordingMs, setRecordingMs] = useState(0);
+  const recordingTimerRef = useRef(null);
+  const [verifying, setVerifying] = useState(false);
+  const recorderRef = useRef(null);
+
+  useEffect(()=>()=>{
+    files.forEach(f => { if(f.preview) URL.revokeObjectURL(f.preview); });
+    if(recorderRef.current?.stream){
+      recorderRef.current.stream.getTracks().forEach(t=>t.stop());
+    }
+    if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+  },[]); // Empty dependency array means this runs on unmount
+
+  const addFile = async (newFile) => {
+    if(!newFile) return;
+
+    setVerifying(true);
+    try {
+      const isVideo = newFile.type.startsWith('video');
+      const isImage = newFile.type.startsWith('image');
+      const isAudio = newFile.type.startsWith('audio');
+
+      if (isImage) {
+        const MAX_SIZE = 1 * 1024 * 1024; // 1MB
+        if (newFile.size > MAX_SIZE) throw new Error('A imagem é muito grande. O tamanho máximo é de 1MB.');
+      } else if (isAudio || isVideo) {
+        const MAX_DURATION = 60; // 1 minute
+        const duration = await getMediaDuration(newFile);
+        if (duration > MAX_DURATION) {
+          const mediaType = isAudio ? 'áudio' : 'vídeo';
+          throw new Error(`O ${mediaType} é muito longo. A duração máxima é de 1 minuto.`);
+        }
+        const preview = URL.createObjectURL(newFile);
+        setFiles(prev => [...prev, {file: newFile, preview, duration}]);
+        return;
+      }
+      
+      const preview = URL.createObjectURL(newFile);
+      setFiles(prev => [...prev, {file: newFile, preview, duration: null}]);
+
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const removeFile = idx => {
+    const removed = files[idx];
+    if(removed.preview) URL.revokeObjectURL(removed.preview);
+    setFiles(prev => prev.filter((_,i) => i !== idx));
+  };
+
+  const handleFilePick = e => {
+    const picked = e.target.files[0];
+    if(picked) addFile(picked);
+    e.target.value = null; // Reset input to allow picking the same file again
+  };
+
+  const startAudioRecording = async () => {
+    if(!navigator.mediaDevices?.getUserMedia) return alert('Microfone não suportado no dispositivo.');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const chunks = [];
+      mediaRecorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type:'audio/webm' });
+        const audioFile = new File([blob], `audio_${Date.now()}.webm`, { type:'audio/webm' });
+        addFile(audioFile);
+        stream.getTracks().forEach(t=>t.stop());
+        recorderRef.current = null;
+        setRecordingAudio(false);
+        setRecordingMs(0);
+        if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      };
+      mediaRecorder.start();
+      setRecordingMs(0);
+      if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(()=>{
+        setRecordingMs(ms => {
+          const next = ms + 200;
+          if(next >= 60000) {
+            mediaRecorder.stop();
+            return 60000;
+          }
+          return next;
+        });
+      },200);
+      recorderRef.current = { recorder: mediaRecorder, stream };
+      setRecordingAudio(true);
+    } catch(e) {
+      alert('Não foi possível acessar o microfone.');
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if(recorderRef.current?.recorder){
+      recorderRef.current.recorder.stop();
+    }
+    // onstop will handle the rest
+  };
+
+  const handleSend = () => {
+    if(!txt && files.length === 0) return alert('Escreva ou anexe algo.');
+    const tipo = files.length > 0 ? (files[0].file.type.startsWith('video') ? 'video' : files[0].file.type.startsWith('image') ? 'foto' : 'audio') : 'texto';
+    onSend(txt, files.map(f => f.file), tipo);
+    // Cleanup is handled by the component unmount/redirect in parent
+  };
+
+  const hasVideo = files.some(f => f.file.type.startsWith('video'));
+  const hasImage = files.some(f => f.file.type.startsWith('image'));
+  const hasAudio = files.some(f => f.file.type.startsWith('audio'));
+
+  return (
+    <div className="p-5 h-screen flex flex-col bg-white fade-in">
+      <div className="flex items-center gap-4 mb-4">
+        <button onClick={onBack} className="text-2xl font-bold text-gray-400 px-2">←</button>
+        <h2 className="text-xl font-bold text-slate-800">Novo Registro</h2>
+      </div>
+      <textarea 
+        className="input-box flex-1 mb-6 text-lg p-4" 
+        style={{resize:'none'}}
+        placeholder="Descreva o que você está sentindo..." 
+        value={txt} 
+        onChange={e=>setTxt(e.target.value)} 
+      />
+      <div className="section-title">Anexar Mídia (Opcional)</div>
+      <p className="text-xs text-gray-500 mb-3" dangerouslySetInnerHTML={{ __html: 'Você pode enviar <b>ou</b> um vídeo (máx 1 min), <b>ou</b> uma foto (máx 1MB) e um áudio (máx 1 min).' }} />
+      <div className="media-row flex-wrap">
+        <label className={`btn-media ${hasVideo || hasImage ? 'opacity-50 cursor-not-allowed' : ''}`}>
+          📷 Foto (câmera)
+          <input type="file" accept="image/*" capture="environment" className="hidden-input" onChange={handleFilePick} disabled={hasVideo || hasImage} />
+        </label>
+        <label className={`btn-media ${hasVideo || hasImage || hasAudio ? 'opacity-50 cursor-not-allowed' : ''}`}>
+          🎥 Vídeo
+          <input type="file" accept="video/*" capture="environment" className="hidden-input" onChange={handleFilePick} disabled={hasVideo || hasImage || hasAudio} />
+        </label>
+        <button type="button" className={`btn-media ${recordingAudio?'active':''} ${hasVideo || hasAudio ? 'opacity-50 cursor-not-allowed' : ''}`} onClick={()=> recordingAudio ? stopAudioRecording() : startAudioRecording()} disabled={hasVideo || hasAudio}>
+          {recordingAudio ? '⏹️ Parar gravação' : '🎙️ Gravar áudio'}
+          <span className="text-[10px] font-normal">(usa microfone do app)</span>
+        </button>
+      </div>
+      {recordingAudio && <div className="text-xs text-amber-700 font-semibold mb-3">Tempo: {formatDuration(recordingMs/1000)} / 01:00</div>}
+      {recordingAudio && <div className="text-xs text-amber-700 font-semibold mb-3">Tempo: {formatDuration(recordingMs/1000)} / 01:00</div>}
+      {verifying && <div className="text-center text-gray-500 my-2">Verificando arquivo...</div>}
+      {files.length > 0 && (
+        <div className="mb-6 bg-green-50 p-3 rounded-xl border border-green-200 shadow-sm space-y-2">
+          {files.map((item, idx) => (
+            <div key={idx} className="bg-white p-2 rounded border border-green-300">
+              <div className="font-bold text-green-700 truncate text-sm">{item.file.name}</div>
+              {item.duration != null && <div className="text-[11px] text-slate-600">Duração: {formatDuration(item.duration)}</div>}
+              {item.file.type.startsWith('audio') && <audio controls src={item.preview} className="w-full max-w-xs mt-2" />}
+              {item.file.type.startsWith('video') && <video controls src={item.preview} className="w-full max-w-sm mt-2 rounded" />}
+              {item.file.type.startsWith('image') && <img src={item.preview} alt="preview" className="w-full max-w-sm mt-2 rounded" />}
+              <button className="btn-sec mt-2 text-xs" onClick={()=>removeFile(idx)}>Remover</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button className="btn-primary" style={{padding:20, fontSize:18}} onClick={handleSend} disabled={verifying}>{verifying ? 'VERIFICANDO...' : 'ENVIAR REGISTRO'}</button>
+    </div>
+  );
+};
+
+// DASHBOARD PACIENTE
+const PatientDash = ({user, onLogout, onNewMsg}) => {
+  const [hist, setHist] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const patientKey = useMemo(() => user.patientId || 'local-'+user.id, [user]);
+  const mountedRef = useRef(true);
+  const activeRegistro = useMemo(() => hist.find(r => r.registroId === activeId) || null, [hist, activeId]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const refreshHist = useCallback(async () => {
+    const r = await db.registros.where('patientId').equals(patientKey).toArray();
+    const sorted = r.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    if(mountedRef.current) setHist(sorted);
+  }, [patientKey]);
+
+  useEffect(() => {
+    let intervalId;
+
+    const pullRemote = async () => {
+      if(!navigator.onLine) return;
+      try {
+        const { data, error } = await supabase
+          .from('registros')
+          .select('registro_id, patient_id, texto, tipo, status, replies_json, resposta, created_at, updated_at')
+          .eq('patient_id', patientKey);
+        if(error || !data) return;
+        for (const item of data) {
+          const existing = await db.registros.where('registroId').equals(item.registro_id).first();
+          const base = {
+            registroId: item.registro_id,
+            patientId: item.patient_id || patientKey,
+            deviceId: existing?.deviceId || 'remote',
+            texto: item.texto || '',
+            tipo: item.tipo || 'texto',
+            status: item.status || 'pendente',
+            replies: item.replies_json || [],
+            resposta: item.resposta || '',
+            createdAt: item.created_at || existing?.createdAt || new Date().toISOString(),
+            updatedAt: item.updated_at || item.created_at || new Date().toISOString(),
+            synced: 1
+          };
+          if(existing) await db.registros.update(existing.id, base);
+          else await db.registros.add(base);
+        }
+      } catch (err) {
+        console.error('Falha ao atualizar registros remotos', err);
+      }
+    };
+
+    const bootstrap = async () => {
+      await refreshHist();
+      await pullRemote();
+      await refreshHist();
+    };
+
+    bootstrap();
+    intervalId = setInterval(async () => {
+      await pullRemote();
+      await refreshHist();
+    }, 15000);
+
+    return () => {
+      if(intervalId) clearInterval(intervalId);
+    };
+  }, [patientKey, refreshHist]);
+
+  return (
+    <div className="p-5 fade-in min-h-screen">
+        <div className="flex justify-between items-center mb-8">
+            <div>
+                <h1 className="text-2xl font-extrabold text-slate-800">Olá, {user.nome.split(' ')[0]}</h1>
+            <div className="text-sm font-bold text-green-600">{user.regiao || 'Sem região'}</div>
+            <div className="text-xs font-semibold text-slate-500">UBS: {user.ubs_referencia || 'Não informado'}</div>
+            {user.acs_responsavel && <div className="text-xs font-semibold text-slate-500">Profissional/ACS: {user.acs_responsavel}</div>}
+            </div>
+            <button onClick={onLogout} className="bg-red-50 text-red-500 px-4 py-2 rounded-lg font-bold text-xs">SAIR</button>
+        </div>
+        <button className="btn-primary mb-8 py-5 shadow-lg" onClick={onNewMsg}><span>✚</span> NOVO REGISTRO</button>
+        <div className="section-title">Seu Histórico</div>
+        {hist.length===0 && <div className="text-center text-gray-400 mt-10">Nenhum registro ainda.</div>}
+        {hist.map(r => {
+          const lastPro = (r.replies || []).filter(rep => rep.from === 'pro').slice(-1)[0];
+          return (
+            <div key={r.id} className="card border-l-4 border-l-green-500 cursor-pointer" onClick={()=>setActiveId(r.registroId)}>
+                  <div className="flex justify-between mb-3">
+                      <span className="font-bold text-gray-400 text-xs tracking-wider">{formatDateISO(r.createdAt)}</span>
+                      <span className={`badge ${r.status==='pendente'?'badge-pendente':'badge-ok'}`}>{r.status}</span>
+                  </div>
+              <div className="flex items-center gap-3">
+                <RegistroThumb registroId={r.registroId} />
+                <div className="flex-1">
+                  <div className="text-lg font-medium text-slate-800 mb-2">{r.texto || 'Mídia enviada'}</div>
+                  {lastPro && (
+                    <div className="text-xs text-emerald-700 font-semibold">Atendido por {lastPro.pro_name || 'Profissional'}{lastPro.pro_ubs ? ` • ${lastPro.pro_ubs}` : ''}</div>
+                  )}
+                  {r.resposta && <div className="mt-3 bg-green-50 p-4 rounded-xl text-green-900 text-sm border border-green-100"><strong>Profissional:</strong> {r.resposta}</div>}
+                </div>
+              </div>
+              </div>
+          );
+        })}
+        {activeRegistro && <PatientHistoryModal registro={activeRegistro} onClose={()=>setActiveId(null)} onUpdated={refreshHist} />}
+    </div>
+  );
+}
+
+// AUTH PROFISSIONAL (CPF-based)
+const ProAuth = ({onAuth, onBack}) => {
+  const [step, setStep] = useState('cpf'); // 'cpf' | 'register'
+  const [cpf, setCpf] = useState('');
+  const [reg, setReg] = useState({nome:'', cpf:'', ubs:'', telefone:''});
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const checkCpf = async () => {
+    if(!cpf) return alert('Digite o CPF');
+    const clean = cpf.replace(/\D/g,'');
+    if(clean.length !== 11) return alert('CPF inválido');
+    
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('profissionais')
+        .select('*')
+        .eq('cpf', clean)
+        .maybeSingle();
+      if(data){
+        onAuth(data);
+      } else {
+        setReg(r=>({...r, cpf: mascaraCPF(clean)}));
+        setStep('register');
+        setMsg('CPF não encontrado. Complete seu cadastro.');
+      }
+    } catch {
+      setReg(r=>({...r, cpf: mascaraCPF(clean)}));
+      setStep('register');
+      setMsg('Offline ou erro. Cadastre-se.');
+    }
+    setLoading(false);
+  };
+
+  const register = async () => {
+    if(!reg.nome || !reg.ubs || !reg.telefone) return alert('Preencha todos os campos');
+    setLoading(true);
+    try {
+      const payload = { 
+        nome: reg.nome,
+        cpf: reg.cpf.replace(/\D/g,''),
+        ubs: reg.ubs,
+        telefone: reg.telefone
+      };
+      const { data, error } = await supabase.from('profissionais').insert(payload).select().maybeSingle();
+      if(error){ alert('Erro ao cadastrar: ' + error.message); }
+      else { alert('Cadastrado com sucesso!'); onAuth(data); }
+    } catch(e) { 
+      alert('Falha de rede: ' + e.message); 
+    }
+    setLoading(false);
+  };
+
+  if(loading) return <Loading text="Verificando..." />;
+
+  if(step==='register') return (
+    <div className="p-6 fade-in">
+      <h2 className="text-2xl font-bold mb-4">Cadastro Profissional</h2>
+      <p className="text-gray-500 mb-4">CPF <strong>{reg.cpf}</strong> não encontrado</p>
+      {msg && <div className="text-xs font-bold mb-4 text-blue-700 bg-blue-50 p-3 rounded-lg border border-blue-200">{msg}</div>}
+      
+      <div className="section-title">CPF (já preenchido)</div>
+      <input className="input-box bg-gray-100" value={reg.cpf} disabled />
+      
+      <div className="section-title">Seu Nome</div>
+      <select className="input-box" value={reg.nome} onChange={e=>setReg({...reg,nome:e.target.value})}>
+        <option value="">Selecione seu nome...</option>
+        {LISTA_ACS.map(n=><option key={n} value={n}>{n}</option>)}
+      </select>
+      
+      <div className="section-title">UBS de Atuação</div>
+      <select className="input-box" value={reg.ubs} onChange={e=>setReg({...reg,ubs:e.target.value})}>
+        <option value="">Selecione...</option>
+        {LISTA_UBS.map(u=><option key={u} value={u}>{u}</option>)}
+      </select>
+      
+      <div className="section-title">Telefone</div>
+      <input className="input-box" value={reg.telefone} onChange={e=>setReg({...reg,telefone:mascaraTelefone(e.target.value)})} placeholder="(91) 98765-4321" inputMode="tel" />
+      
+      <button className="btn-primary mt-4" onClick={register}>CONCLUIR CADASTRO</button>
+      <button className="btn-sec mt-3" onClick={()=>{setStep('cpf'); setCpf(''); setMsg('');}}>Voltar</button>
+    </div>
+  );
+
+  return (
+    <div className="p-6 fade-in pt-20">
+      <h2 className="text-2xl font-bold mb-4">Acesso Profissional</h2>
+      <p className="text-gray-500 mb-6">Digite seu CPF para entrar</p>
+      <input 
+        className="input-box text-center text-xl font-bold" 
+        value={cpf} 
+        onChange={e=>setCpf(mascaraCPF(e.target.value))} 
+        placeholder="000.000.000-00" 
+        inputMode="numeric" 
+        maxLength={14}
+      />
+      <button className="btn-primary mt-4" onClick={checkCpf}>ACESSAR</button>
+      <button className="btn-sec mt-3" onClick={onBack}>Voltar</button>
+    </div>
+  );
+};
+
+// FICHA COMPLETA DO PROFISSIONAL
+const FichaMedica = ({initialData, onSave, onCancel}) => {
+  const defaultFicha = {
+    foto_url:'', nome:'', cpf:'', nascimento:'', genero:'', raca:'', endereco:'', telefone:'', escolaridade:'', profissao:'', mora_sozinho:'', regiao:'', ubs_referencia:'', acs_responsavel:'', hipertensao:'', diabetes:'', vicios:'', tempo_vicio:'', altura:'', peso_inicial:'', enxerga_bem:'', consulta_oftalmo:'', uso_medicacoes:'', atividade_fisica:'', freq_atividade:'', tipo_atividade:'', meta_peso:'', meta_glicemia:'', meta_pa_min:'', meta_pa_max:''
+  };
+  const [form, setForm] = useState({ ...defaultFicha, ...(initialData || {}) });
+  const [fotoPreview, setFotoPreview] = useState(initialData?.foto_url || '');
+  const [fotoFile, setFotoFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const normalized = { ...defaultFicha, ...(initialData || {}) };
+    if(normalized.cpf) normalized.cpf = mascaraCPF(normalized.cpf);
+    if(normalized.telefone) normalized.telefone = mascaraTelefone(normalized.telefone);
+    setForm(normalized);
+    setFotoPreview(normalized.foto_url || '');
+    setFotoFile(null);
+  }, [initialData]);
+
+  const hasBasicDataOnly = initialData && initialData.nome && initialData.cpf && !initialData.foto_url && !initialData.genero;
+  const isNewPatient = !initialData || (!initialData.nome && !initialData.cpf);
+
+  useEffect(() => {
+    return () => {
+      if(fotoPreview && fotoPreview.startsWith('blob:')) URL.revokeObjectURL(fotoPreview);
+    };
+  }, [fotoPreview]);
+
+  const requiredLabel = label => (
+    <div className="section-title flex items-center justify-between">
+      <span>{label}</span>
+      <span className="text-[10px] font-black text-rose-500 uppercase tracking-wide">Necessário</span>
+    </div>
+  );
+
+  const updateField = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+  const handleFoto = e => {
+    const file = e.target.files[0];
+    if(fotoPreview && fotoPreview.startsWith('blob:')) URL.revokeObjectURL(fotoPreview);
+    if(file){
+      const url = URL.createObjectURL(file);
+      setFotoFile(file);
+      setFotoPreview(url);
+    } else {
+      setFotoFile(null);
+      setFotoPreview(form.foto_url || '');
+    }
+  };
+
+  const REQUIRED_KEYS = ['nome','cpf','nascimento','genero','raca','endereco','telefone','escolaridade','profissao','mora_sozinho','regiao','ubs_referencia','acs_responsavel','hipertensao','diabetes','vicios','tempo_vicio','peso_inicial','enxerga_bem','consulta_oftalmo','uso_medicacoes','atividade_fisica','freq_atividade','tipo_atividade','meta_peso','meta_glicemia','meta_pa_min','meta_pa_max'];
+
+  const handleSubmit = async () => {
+    for(const key of REQUIRED_KEYS){
+      if(!form[key]){ alert('Preencha todos os campos obrigatórios.'); return; }
+    }
+    if(!fotoPreview && !fotoFile && !form.foto_url){
+      alert('Envie a foto de perfil.');
+      return;
+    }
+    setSaving(true);
+    try {
+      let fotoFinal = form.foto_url || '';
+      if(fotoFile) fotoFinal = await fileToDataUrl(fotoFile);
+      await onSave({ ...form, foto_url: fotoFinal });
+    } catch (err) {
+      alert('Falha ao salvar prontuário. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fade-in pb-20">
+      {hasBasicDataOnly && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-4 mb-6">
+          <div className="text-sm font-bold mb-1">✓ Paciente já cadastrado</div>
+          <div className="text-xs">Complete o prontuário com as informações de saúde detalhadas.</div>
+        </div>
+      )}
+      {isNewPatient && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6">
+          <div className="text-sm font-bold mb-1">⚠ Novo Prontuário</div>
+          <div className="text-xs">Este CPF não foi encontrado. Cadastre um novo paciente com todas as informações.</div>
+        </div>
+      )}
+      {requiredLabel('Foto de Perfil')}
+      <div className="flex items-center gap-4 mb-6">
+        <label className="thumb" style={{background:'#fff', overflow:'hidden', position:'relative', zIndex:1, flexShrink:0}}>
+          {fotoPreview ? <img src={fotoPreview} alt="foto" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : '📷'}
+          <input type="file" accept="image/*" className="hidden-input" onChange={handleFoto} />
+        </label>
+        <div className="text-xs text-gray-500 font-semibold">Escolha uma imagem nítida do paciente.</div>
+      </div>
+
+      {requiredLabel('Nome completo')}
+      <input className="input-box" value={form.nome} onChange={e=>updateField('nome', e.target.value)} placeholder="Nome completo" />
+
+      {requiredLabel('CPF')}
+      <input className="input-box" value={form.cpf} onChange={e=>updateField('cpf', mascaraCPF(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" />
+
+      {requiredLabel('Data de Nascimento')}
+      <input className="input-box" value={form.nascimento} onChange={e=>updateField('nascimento', mascaraData(e.target.value))} placeholder="DD/MM/AAAA" inputMode="numeric" />
+
+      {requiredLabel('Gênero')}
+      <select className="input-box" value={form.genero} onChange={e=>updateField('genero', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Masculino</option>
+        <option>Feminino</option>
+        <option>Não definido</option>
+      </select>
+
+      {requiredLabel('Raça/Cor')}
+      <select className="input-box" value={form.raca} onChange={e=>updateField('raca', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Branco</option>
+        <option>Pardo</option>
+        <option>Negro</option>
+        <option>Asiático</option>
+        <option>Indígena</option>
+      </select>
+
+      {requiredLabel('Endereço')}
+      <input className="input-box" value={form.endereco} onChange={e=>updateField('endereco', e.target.value)} placeholder="Rua das Mangueiras, nº 245, Bairro Nazaré, Belém – PA" />
+
+      {requiredLabel('Telefone')}
+      <input className="input-box" value={form.telefone} onChange={e=>updateField('telefone', mascaraTelefone(e.target.value))} placeholder="(91) 98765-4321" inputMode="tel" />
+
+      {requiredLabel('Grau de Instrução')}
+      <select className="input-box" value={form.escolaridade} onChange={e=>updateField('escolaridade', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sem instrução</option>
+        <option>Fundamental incompleto</option>
+        <option>Fundamental completo</option>
+        <option>Ensino médio incompleto</option>
+        <option>Ensino médio completo</option>
+        <option>Ensino superior incompleto</option>
+        <option>Ensino superior completo</option>
+      </select>
+
+      {requiredLabel('Profissão')}
+      <input className="input-box" value={form.profissao} onChange={e=>updateField('profissao', e.target.value)} placeholder="Profissão" />
+
+      {requiredLabel('Mora sozinho?')}
+      <select className="input-box" value={form.mora_sozinho} onChange={e=>updateField('mora_sozinho', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sim, moro sozinho(a)</option>
+        <option>Não, moro com familiares</option>
+        <option>Não, moro com outras pessoas</option>
+      </select>
+
+      {requiredLabel('Região')}
+      <select className="input-box" value={form.regiao} onChange={e=>updateField('regiao', e.target.value)}>
+        <option value="">Escolha...</option>
+        {LISTA_REGIOES.map(r => <option key={r}>{r}</option>)}
+      </select>
+
+      {requiredLabel('Unidade de Referência')}
+      <select className="input-box" value={form.ubs_referencia} onChange={e=>updateField('ubs_referencia', e.target.value)}>
+        <option value="">Escolha...</option>
+        {LISTA_UBS.map(u => <option key={u}>{u}</option>)}
+      </select>
+
+      {requiredLabel('Agente Comunitário de Saúde')}
+      <select className="input-box" value={form.acs_responsavel} onChange={e=>updateField('acs_responsavel', e.target.value)}>
+        <option value="">Escolha algo</option>
+        {LISTA_ACS.map(a => <option key={a}>{a}</option>)}
+      </select>
+
+      {requiredLabel('Hipertensão')}
+      <select className="input-box" value={form.hipertensao} onChange={e=>updateField('hipertensao', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sim</option>
+        <option>Não</option>
+      </select>
+
+      {requiredLabel('Diabetes')}
+      <select className="input-box" value={form.diabetes} onChange={e=>updateField('diabetes', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sim</option>
+        <option>Não</option>
+      </select>
+
+      {requiredLabel('Vícios')}
+      <select className="input-box" value={form.vicios} onChange={e=>updateField('vicios', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Tabagismo</option>
+        <option>Etilismo</option>
+        <option>Ex-etilista</option>
+        <option>Ex-tabagista</option>
+        <option>Uso de drogas ilícitas</option>
+        <option>Nenhum relato</option>
+      </select>
+
+      {requiredLabel('Tempo de Vício')}
+      <select className="input-box" value={form.tempo_vicio} onChange={e=>updateField('tempo_vicio', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Até 5 anos</option>
+        <option>De 5 a 10 anos</option>
+        <option>Mais de 10 anos</option>
+      </select>
+
+      <div className="section-title">Altura</div>
+      <input className="input-box" value={form.altura} onChange={e=>updateField('altura', e.target.value)} placeholder="Ex.: 1,52 cm" />
+
+      {requiredLabel('Peso Inicial')}
+      <input className="input-box" value={form.peso_inicial} onChange={e=>updateField('peso_inicial', e.target.value)} placeholder="Ex.: 50,00" />
+
+      {requiredLabel('Enxerga bem?')}
+      <select className="input-box" value={form.enxerga_bem} onChange={e=>updateField('enxerga_bem', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sim</option>
+        <option>Não</option>
+      </select>
+
+      {requiredLabel('Consulta com oftalmologista')}
+      <select className="input-box" value={form.consulta_oftalmo} onChange={e=>updateField('consulta_oftalmo', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sim</option>
+        <option>Não</option>
+      </select>
+
+      {requiredLabel('Faz uso de medicações?')}
+      <select className="input-box" value={form.uso_medicacoes} onChange={e=>updateField('uso_medicacoes', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sim</option>
+        <option>Não</option>
+      </select>
+
+      {requiredLabel('Faz Atividade Física?')}
+      <select className="input-box" value={form.atividade_fisica} onChange={e=>updateField('atividade_fisica', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Sim</option>
+        <option>Não</option>
+      </select>
+
+      {requiredLabel('Frequência da Atividade Física')}
+      <select className="input-box" value={form.freq_atividade} onChange={e=>updateField('freq_atividade', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>1x semana</option>
+        <option>2-3x semana</option>
+        <option>4-5x semana</option>
+        <option>Diário</option>
+        <option>Nunca</option>
+      </select>
+
+      {requiredLabel('Que tipo de Atividade Física?')}
+      <select className="input-box" value={form.tipo_atividade} onChange={e=>updateField('tipo_atividade', e.target.value)}>
+        <option value="">Escolha...</option>
+        <option>Caminhada</option>
+        <option>Corrida</option>
+        <option>Musculação</option>
+        <option>Dança</option>
+        <option>Esportes</option>
+        <option>Outra</option>
+      </select>
+
+      {requiredLabel('Meta de Peso')}
+      <input className="input-box" value={form.meta_peso} onChange={e=>updateField('meta_peso', e.target.value)} placeholder="Ex.: 60" />
+
+      {requiredLabel('Meta Glicemia')}
+      <input className="input-box" value={form.meta_glicemia} onChange={e=>updateField('meta_glicemia', e.target.value)} placeholder="Ex.: 110" />
+
+      {requiredLabel('Meta PA Mínima')}
+      <input className="input-box" value={form.meta_pa_min} onChange={e=>updateField('meta_pa_min', e.target.value)} placeholder="Ex.: 110" />
+
+      {requiredLabel('Meta PA Máxima')}
+      <input className="input-box" value={form.meta_pa_max} onChange={e=>updateField('meta_pa_max', e.target.value)} placeholder="Ex.: 140" />
+
+      <button className="btn-primary mt-4" onClick={handleSubmit} disabled={saving}>{saving ? 'SALVANDO...' : 'SALVAR PRONTUÁRIO'}</button>
+      <button className="btn-sec mt-3" onClick={onCancel}>Cancelar</button>
+    </div>
+  );
+};
+
+const MedicationManagementList = ({onPatientClick, onBack}) => {
+  const [pacientes, setPacientes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [medStatus, setMedStatus] = useState({});
+
+  const buildStatusMap = useCallback((patients, medsList) => {
+    const medSet = new Set();
+    (medsList || []).forEach(med => {
+      const key = med.patient_id || med.patientId || (med.cpf_paciente ? `cpf-${String(med.cpf_paciente).replace(/\D/g,'')}` : null);
+      if(!key) return;
+      if(isMedicationActiveValue(med.ativo)) medSet.add(key);
+    });
+    const status = {};
+    (patients || []).forEach(p => {
+      const patientId = p.patient_id || p.patientId || (p.cpf ? 'cpf-' + String(p.cpf).replace(/\D/g,'') : undefined);
+      if(!patientId) return;
+      status[patientId] = {
+        requires: patientUsesMedication(p.uso_medicacoes || p.usoMedicacoes || ''),
+        hasMedication: medSet.has(patientId)
+      };
+    });
+    return status;
+  }, []);
+
+  const sortByName = useCallback(list => [...list].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), []);
+
+  const fetchPacientes = useCallback(async () => {
+    setLoading(true);
+    try {
+      const localPacientes = await db.perfil.toArray();
+      const sortedLocal = sortByName(localPacientes);
+      setPacientes(sortedLocal);
+      const localMeds = await db.medicamentos.toArray();
+      setMedStatus(buildStatusMap(sortedLocal, localMeds));
+
+      if (navigator.onLine) {
+        const { data, error } = await supabase.from('perfis').select('*');
+        if (error) throw error;
+
+        await db.transaction('rw', db.perfil, async () => {
+          for (const p of data) {
+            const safeCpf = p.cpf ? String(p.cpf).replace(/\D/g,'') : '';
+            await db.perfil.put({ ...p, patientId: p.patient_id || (safeCpf ? 'cpf-' + safeCpf : undefined), synced: 1 });
+          }
+        });
+
+        let medsList = await db.medicamentos.toArray();
+        try {
+          const { data: medsRemote } = await supabase.from('medicamentos').select('*');
+          if (Array.isArray(medsRemote)) {
+            medsList = medsRemote;
+            await db.transaction('rw', db.medicamentos, async () => {
+              for (const med of medsRemote) {
+                await db.medicamentos.put({
+                  ...med,
+                  medicationId: med.medication_id || med.medicationId,
+                  patientId: med.patient_id || med.patientId || (med.cpf_paciente ? `cpf-${String(med.cpf_paciente).replace(/\D/g,'')}` : undefined),
+                  synced: 1
+                });
+              }
+            });
+          }
+        } catch (medErr) {
+          console.warn('Falha ao atualizar medicações remotas:', medErr);
+          medsList = await db.medicamentos.toArray();
+        }
+
+        const allPacientes = await db.perfil.toArray();
+        const sortedFinal = sortByName(allPacientes);
+        setPacientes(sortedFinal);
+        setMedStatus(buildStatusMap(sortedFinal, medsList));
+        return;
+      }
+    } catch (error) {
+      console.error('Erro ao buscar pacientes:', error);
+      const fallbackPacientes = await db.perfil.toArray();
+      const sortedFallback = sortByName(fallbackPacientes);
+      setPacientes(sortedFallback);
+      const fallbackMeds = await db.medicamentos.toArray();
+      setMedStatus(buildStatusMap(sortedFallback, fallbackMeds));
+    } finally {
+      setLoading(false);
+    }
+  }, [buildStatusMap, sortByName]);
+
+  useEffect(() => {
+    fetchPacientes();
+  }, [fetchPacientes]);
+
+  const filteredPacientes = pacientes.filter(p => {
+    if(!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    const termNumbers = searchTerm.replace(/\D/g,'');
+    const nomeMatch = (p.nome || '').toLowerCase().includes(term);
+    const cpfStr = mascaraCPF(String(p.cpf || ''));
+    const cpfMatch = cpfStr.replace(/\D/g,'').includes(termNumbers);
+    return nomeMatch || cpfMatch;
+  });
+
+  return (
+    <div className="p-4 fade-in">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold">Gerenciar Medicações</h2>
+          <p className="text-xs text-slate-400 font-semibold">Dados sincronizados automaticamente a cada 5s</p>
+        </div>
+        <button onClick={onBack} className="btn-sec w-auto px-4 py-2 text-sm font-semibold">Menu</button>
+      </div>
+      
+      <input 
+        type="text"
+        className="input-box mb-4"
+        placeholder="Buscar por nome ou CPF..."
+        value={searchTerm}
+        onChange={e => setSearchTerm(e.target.value)}
+      />
+
+      {loading ? (
+        <div className="text-center text-gray-500 py-10">Carregando pacientes...</div>
+      ) : (
+        <div className="space-y-3">
+          {filteredPacientes.map(paciente => {
+            const patientId = paciente.patient_id || paciente.patientId || (paciente.cpf ? 'cpf-' + String(paciente.cpf).replace(/\D/g,'') : undefined);
+            const nascimentoNormalizado = normalizeDateInput(paciente.nascimento);
+            const idadeLabel = nascimentoNormalizado && nascimentoNormalizado.includes('/') ? calcAge(nascimentoNormalizado) : '';
+            const localidade = paciente.regiao || 'Local não informado';
+            const ultimaAtualizacaoRaw = paciente.updated_at || paciente.updatedAt || paciente.created_at || paciente.createdAt;
+            const ultimaAtualizacao = ultimaAtualizacaoRaw ? formatDateISO(ultimaAtualizacaoRaw) : '';
+            const cpfFormatado = paciente.cpf ? mascaraCPF(String(paciente.cpf)) : '---';
+            const unidade = paciente.ubs_referencia || 'UBS não informada';
+            const usaMedicacao = paciente.uso_medicacoes ? `Uso de medicações: ${paciente.uso_medicacoes}` : null;
+
+            const cadastroIncompleto = !(paciente.foto_url && paciente.genero && paciente.hipertensao);
+            const statusInfo = medStatus[patientId] || {
+              requires: patientUsesMedication(paciente.uso_medicacoes || paciente.usoMedicacoes || ''),
+              hasMedication: false
+            };
+            const cadastroBadge = cadastroIncompleto
+              ? { text: 'CADASTRO PENDENTE', className: 'bg-red-100 text-red-700 border border-red-200' }
+              : { text: 'CADASTRO OK', className: 'bg-emerald-100 text-emerald-700 border border-emerald-200' };
+            const medicationBadge = statusInfo.requires
+              ? (statusInfo.hasMedication
+                ? { text: 'MEDICAÇÃO REGISTRADA', className: 'bg-emerald-100 text-emerald-700 border border-emerald-200' }
+                : { text: 'MEDICAÇÃO PENDENTE', className: 'bg-amber-100 text-amber-700 border border-amber-200' })
+              : { text: 'NÃO DECLAROU USO DE MEDICAÇÃO', className: 'bg-slate-100 text-slate-600 border border-slate-200' };
+            return (
+              <div
+                key={patientId || paciente.id || cpfFormatado}
+                className="card cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-emerald-50"
+                onClick={() => onPatientClick({ ...paciente, patient_id: patientId, patientId })}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-emerald-500 font-bold mb-1">Paciente</div>
+                    <div className="font-bold text-lg text-slate-900">{paciente.nome || 'Sem nome cadastrado'}</div>
+                  </div>
+                  {ultimaAtualizacao && <div className="text-[11px] font-semibold text-slate-400">{ultimaAtualizacao}</div>}
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${cadastroBadge.className}`}>{cadastroBadge.text}</span>
+                  <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${medicationBadge.className}`}>{medicationBadge.text}</span>
+                </div>
+                {cadastroIncompleto && (
+                  <div className="mt-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    Cadastro profissional pendente. Clique para completar o prontuário.
+                  </div>
+                )}
+                <div className="mt-3 space-y-1 text-sm text-slate-600">
+                  <div className="font-semibold text-slate-500">CPF: <span className="font-normal">{cpfFormatado}</span></div>
+                  <div>{localidade}{idadeLabel ? ` • ${idadeLabel}` : ''}</div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">{unidade}</span>
+                  {usaMedicacao && <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-600">{usaMedicacao}</span>}
+                </div>
+              </div>
+            );
+          })}
+          {filteredPacientes.length === 0 && <div className="text-center text-gray-400 py-10">Nenhum paciente encontrado.</div>}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MedicationPatientDetail = ({patient, onBack, onEditProfile, onMonitor, onManageMedications}) => {
+  if (!patient) return <Loading text="Carregando paciente..." />;
+
+  const fallbackCpf = patient?.cpf ? String(patient.cpf).replace(/\D/g,'') : '';
+  const resolvedPatientId = patient.patient_id || patient.patientId || (fallbackCpf ? `cpf-${fallbackCpf}` : undefined);
+  const nascimentoNormalizado = normalizeDateInput(patient.nascimento);
+  const nascimentoFormatado = nascimentoNormalizado ? mascaraData(nascimentoNormalizado) : '';
+  const nascimentoLabel = nascimentoFormatado || '---';
+  const idadeLabel = nascimentoNormalizado && nascimentoNormalizado.includes('/') ? calcAge(nascimentoNormalizado) : '';
+
+  const safePatient = {
+    foto_url: '',
+    nome: 'Nome do Paciente',
+    ubs_referencia: 'UBS não informada',
+    regiao: 'Localidade não informada',
+    nascimento: nascimentoNormalizado,
+    genero: 'Não informado',
+    raca: 'Não informada',
+    hipertensao: 'Não informado',
+    diabetes: 'Não informado',
+    uso_medicacoes: 'Não informado',
+    cpf: fallbackCpf || patient.cpf || '',
+    patient_id: resolvedPatientId,
+    patientId: resolvedPatientId,
+    ...patient
+  };
+
+  const infoRows = [
+    { label: 'Data de Nascimento', value: nascimentoLabel, helper: idadeLabel },
+    { label: 'Gênero', value: safePatient.genero },
+    { label: 'Raça e Cor', value: safePatient.raca },
+    { label: 'Hipertensão', value: safePatient.hipertensao, tone: safePatient.hipertensao === 'Sim' ? 'alert' : undefined },
+    { label: 'Diabetes', value: safePatient.diabetes, tone: safePatient.diabetes === 'Sim' ? 'alert' : undefined },
+    { label: 'Faz uso de medicações?', value: safePatient.uso_medicacoes, tone: safePatient.uso_medicacoes === 'Sim' ? 'ok' : undefined },
+    { label: 'CPF', value: safePatient.cpf ? mascaraCPF(String(safePatient.cpf)) : '---' },
+    { label: 'Região', value: safePatient.regiao }
+  ];
+
+  const resolveToneClass = tone => {
+    if(tone === 'alert') return 'text-red-600 font-extrabold';
+    if(tone === 'ok') return 'text-emerald-700 font-extrabold';
+    return 'text-slate-900 font-semibold';
+  };
+
+  return (
+    <div className="modal-bg" onClick={onBack}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto fade-in" onClick={e => e.stopPropagation()}>
+        <div className="relative bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 px-6 pt-6 pb-14 text-center">
+          <button className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-4 py-2 text-sm font-bold" onClick={onBack}>✕</button>
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-28 h-28 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white/20">
+              <img 
+                src={safePatient.foto_url || 'https://via.placeholder.com/150'} 
+                alt="Foto do Paciente" 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <h3 className="text-2xl font-extrabold text-white mt-2">{safePatient.nome}</h3>
+            <span className="text-sm text-emerald-100">Unidade: {safePatient.ubs_referencia}</span>
+            <span className="text-xs text-emerald-100">{safePatient.regiao}</span>
+            {safePatient.uso_medicacoes && (
+              <span className={`text-xs font-semibold mt-1 ${safePatient.uso_medicacoes === 'Sim' ? 'text-emerald-100' : 'text-emerald-200'}`}>
+                Faz uso de medicações? {safePatient.uso_medicacoes}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 -mt-6 space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-slate-400 font-bold mb-5">Informações Gerais</div>
+            <div className="space-y-5">
+              {infoRows.map((row, index) => (
+                <div key={index} className="flex justify-between items-start gap-6">
+                  <div className="text-[11px] uppercase tracking-[0.25em] text-slate-400 font-bold mt-1">{row.label}</div>
+                  <div className={`text-sm text-right ${resolveToneClass(row.tone)}`}>
+                    <div>{row.value || '---'}</div>
+                    {row.helper && <div className="text-xs text-slate-400 font-semibold mt-1">{row.helper}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              className="w-full py-3 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold shadow-md flex items-center justify-center gap-2"
+              onClick={() => {
+                onMonitor(safePatient);
+                onBack();
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
+              Monitorar
+            </button>
+            <button
+              className="w-full py-3 rounded-full border-2 border-emerald-600 text-emerald-700 font-bold flex items-center justify-center gap-2"
+              onClick={() => onEditProfile(safePatient)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
+              Editar Perfil
+            </button>
+            <button
+              className="w-full py-3 rounded-full bg-blue-900 text-white font-bold flex items-center justify-center gap-2"
+              onClick={() => {
+                onManageMedications(safePatient);
+                onBack();
+              }}
+            >
+              💊 Medicações
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MonitorConversationModal = ({data, onClose, onExpandMedia}) => {
+  if(!data) return null;
+  const perfil = data.perfil || {};
+  const registro = data.registro || {};
+  const cpfFormatado = perfil.cpf ? mascaraCPF(String(perfil.cpf)) : '---';
+  const nascimentoNormalizado = normalizeDateInput(perfil.nascimento);
+  const idadeLabel = nascimentoNormalizado && nascimentoNormalizado.includes('/') ? calcAge(nascimentoNormalizado) : '';
+  const unidade = perfil.ubs_referencia || 'UBS não informada';
+  const regiao = perfil.regiao || 'Localidade não informada';
+  const ultimaAtualizacao = registro.updated_at || registro.created_at || registro.at || null;
+  const replies = Array.isArray(registro.replies) ? registro.replies : [];
+  const registroId = registro.registro_id || registro.registroId || registro.id;
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden fade-in" onClick={e => e.stopPropagation()}>
+        <div className="relative bg-gradient-to-r from-slate-900 via-emerald-700 to-emerald-600 px-8 pt-8 pb-16 text-white">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="text-xs uppercase tracking-[0.4em] text-emerald-200 font-bold mb-2">Monitoramento</div>
+              <h3 className="text-3xl font-extrabold leading-tight">{perfil.nome || 'Paciente sem nome'}</h3>
+              <div className="flex flex-wrap gap-2 text-sm text-emerald-100 font-semibold mt-3">
+                <span className="px-3 py-1 rounded-full bg-white/10">CPF {cpfFormatado}</span>
+                <span className="px-3 py-1 rounded-full bg-white/10">{regiao}</span>
+                {idadeLabel && <span className="px-3 py-1 rounded-full bg-white/10">{idadeLabel}</span>}
+              </div>
+              <div className="text-xs text-emerald-100 mt-3">Unidade: {unidade}</div>
+              {ultimaAtualizacao && <div className="text-[11px] text-emerald-200 mt-1">Última atualização: {formatDateISO(ultimaAtualizacao)}</div>}
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-sec w-auto px-4 py-2 text-sm font-semibold bg-white/20 border-white/30 text-white" onClick={onClose}>✕ Fechar</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 -mt-10 relative z-10">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-lg overflow-hidden">
+            <div className="px-6 pt-8 pb-6 space-y-8 max-h-[65vh] overflow-y-auto">
+              {registro.texto && (
+                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                  <div className="text-xs uppercase tracking-[0.35em] text-slate-400 font-bold mb-2">Mensagem inicial do paciente</div>
+                  <p className="text-base text-slate-700 leading-relaxed">{registro.texto}</p>
+                </div>
+              )}
+
+              {registroId && (
+                <div>
+                  <div className="text-xs uppercase tracking-[0.35em] text-slate-400 font-bold mb-3">Anexos enviados</div>
+                  <MediasDoRegistro registroId={registroId} onMediaClick={(url, type)=>onExpandMedia && onExpandMedia(url, type)} />
+                </div>
+              )}
+
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <div className="text-xs uppercase tracking-[0.35em] text-slate-400 font-bold">Histórico completo</div>
+                  <span className="text-xs text-slate-500 font-semibold">{replies.length} interação{replies.length === 1 ? '' : 'es'}</span>
+                </div>
+                {replies.length === 0 && (
+                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-6 text-center text-slate-400">
+                    Nenhuma interação registrada entre profissional e paciente até o momento.
+                  </div>
+                )}
+                {replies.length > 0 && (
+                  <div className="space-y-4">
+                    {replies.map((reply, index) => {
+                      const allUrls = reply.urls && Array.isArray(reply.urls) ? reply.urls : (reply.url ? [reply.url] : []);
+                      const isPro = reply.from === 'pro';
+                      const replyDate = reply.at || reply.timestamp || reply.updated_at || reply.created_at || reply.data || null;
+                      return (
+                        <div key={index} className={`flex ${isPro ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[80%] p-5 rounded-2xl border ${isPro ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-slate-200'} shadow-sm`}>
+                            <div className="flex items-center justify-between gap-4 mb-3">
+                              <div className={`text-xs font-bold tracking-wide ${isPro ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                {isPro ? (reply.pro_name ? `🩺 ${reply.pro_name}` : '🩺 Profissional') : '👤 Paciente'}
+                              </div>
+                              {replyDate && <div className="text-[10px] font-semibold text-slate-400">{formatDateISO(replyDate)}</div>}
+                            </div>
+                            {reply.text && <div className="text-sm text-slate-700 leading-relaxed">{reply.text}</div>}
+                            {allUrls.length > 0 && (
+                              <div className="mt-3 space-y-3">
+                                {allUrls.map((url, idx) => {
+                                  const isVideo = ['.mp4', '.webm', '.mov', '.avi', '.mkv', 'video'].some(e => url.includes(e));
+                                  const isAudio = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', 'audio'].some(e => url.includes(e));
+                                  if(isAudio) {
+                                    return (
+                                      <div key={idx} className="bg-white rounded-xl border border-slate-200 p-3">
+                                        <div className="text-xs text-slate-500 font-bold mb-2">🎵 Áudio</div>
+                                        <audio controls src={url} className="w-full" />
+                                      </div>
+                                    );
+                                  }
+                                  if(isVideo) {
+                                    return (
+                                      <div key={idx} className="bg-white rounded-xl border-2 border-slate-200 overflow-hidden">
+                                        <div className="bg-slate-50 px-3 py-2 text-xs text-slate-500 font-bold border-b">🎥 Vídeo</div>
+                                        <video controls src={url} className="w-full" style={{maxHeight:'320px'}} />
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <img
+                                      key={idx}
+                                      src={url}
+                                      alt="anexo"
+                                      className="w-full rounded-xl border-2 border-slate-200 cursor-pointer hover:border-emerald-400 transition-all"
+                                      onClick={()=>onExpandMedia && onExpandMedia(url, 'image')}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MedicationEditorModal = ({patient, onClose}) => {
+  const patientId = patient?.patient_id || patient?.patientId;
+  const [medications, setMedications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({...EMPTY_MEDICATION_FORM});
+  const [error, setError] = useState('');
+
+  const cpfFormatado = patient?.cpf ? mascaraCPF(String(patient.cpf)) : '---';
+  const usoMedicacoes = patient?.uso_medicacoes || 'Não informado';
+
+  const parseHorarios = value => {
+    if(Array.isArray(value)) return value;
+    if(typeof value === 'string') {
+      return value.split(',').map(v => v.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  const refreshMedications = useCallback(async () => {
+    if(!patientId) {
+      setMedications([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      let localMeds = await db.medicamentos.where('patientId').equals(patientId).toArray();
+      localMeds = localMeds.sort((a,b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+      setMedications(localMeds);
+
+      if(navigator.onLine) {
+        const { data, error } = await supabase.from('medicamentos').select('*').eq('patient_id', patientId);
+        if(error) throw error;
+        if(data && data.length > 0) {
+          await db.transaction('rw', db.medicamentos, async () => {
+            for(const med of data) {
+              await db.medicamentos.put({
+                ...med,
+                medicationId: med.medication_id || med.medicationId,
+                patientId: med.patient_id || patientId,
+                horarios: med.horarios,
+                synced: 1
+              });
+            }
+          });
+          const updatedLocal = await db.medicamentos.where('patientId').equals(patientId).toArray();
+          setMedications(updatedLocal.sort((a,b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime()));
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao carregar medicações:', err);
+      const fallback = await db.medicamentos.where('patientId').equals(patientId || '').toArray();
+      setMedications(fallback.sort((a,b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime()));
+    } finally {
+      setLoading(false);
+    }
+  }, [patientId]);
+
+  useEffect(() => {
+    setForm({...EMPTY_MEDICATION_FORM});
+    setError('');
+    refreshMedications();
+  }, [patientId, refreshMedications]);
+
+  const toggleHorario = horario => {
+    setForm(prev => {
+      const exists = prev.horarios.includes(horario);
+      const horarios = exists ? prev.horarios.filter(h => h !== horario) : [...prev.horarios, horario];
+      return { ...prev, horarios };
+    });
+  };
+
+  const handleInput = (field, value) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    setError('');
+    if(!patientId) {
+      setError('Paciente sem identificador válido.');
+      return;
+    }
+    if(!form.nome.trim()) {
+      setError('Informe o nome da medicação.');
+      return;
+    }
+    if(!form.tipo) {
+      setError('Selecione o tipo da medicação.');
+      return;
+    }
+    if(form.horarios.length === 0) {
+      setError('Escolha pelo menos um horário.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const medicationId = uuidv4();
+      const horariosJoin = form.horarios.join(',');
+      const timestamp = new Date().toISOString();
+
+      if(navigator.onLine) {
+        await supabase.from('medicamentos').upsert({
+          medication_id: medicationId,
+          patient_id: patientId,
+          nome_paciente: patient?.nome || null,
+          cpf_paciente: patient?.cpf || null,
+          tipo_medicamento: form.tipo,
+          nome_medicamento: form.nome.trim(),
+          dosagem: form.dosagem,
+          horarios: horariosJoin,
+          data_prescricao: form.data_prescricao || null,
+          data_dispensacao: form.data_dispensacao || null,
+          data_inicio: form.data_inicio || null,
+          data_termino: form.data_termino || null,
+          ativo: form.ativo ? 'Sim' : 'Não',
+          updated_at: timestamp,
+          created_at: timestamp
+        }, { onConflict: 'medication_id' });
+      }
+
+      await db.medicamentos.put({
+        medicationId,
+        patientId,
+        synced: navigator.onLine ? 1 : 0,
+        tipo_medicamento: form.tipo,
+        nome_medicamento: form.nome.trim(),
+        dosagem: form.dosagem,
+        horarios: horariosJoin,
+        data_prescricao: form.data_prescricao || '',
+        data_dispensacao: form.data_dispensacao || '',
+        data_inicio: form.data_inicio || '',
+        data_termino: form.data_termino || '',
+        ativo: form.ativo ? 'Sim' : 'Não',
+        nome_paciente: patient?.nome || '',
+        cpf_paciente: patient?.cpf || '',
+        updated_at: timestamp,
+        created_at: timestamp
+      });
+
+      setForm({...EMPTY_MEDICATION_FORM});
+      await refreshMedications();
+      alert(navigator.onLine ? 'Medicação registrada com sucesso!' : 'Medicação salva offline. Sincronize quando possível.');
+    } catch (err) {
+      console.error('Erro ao salvar medicação:', err);
+      setError('Não foi possível salvar a medicação. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatDateLabel = value => {
+    if(!value) return '--';
+    const normalized = normalizeDateInput(value);
+    if(!normalized) return '--';
+    if(normalized.includes('/')) return normalized;
+    return mascaraData(normalized);
+  };
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden fade-in" onClick={e => e.stopPropagation()}>
+        <div className="relative bg-gradient-to-r from-blue-900 via-blue-800 to-emerald-600 px-8 pt-8 pb-16 text-white">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="text-xs uppercase tracking-[0.4em] text-emerald-200 font-bold mb-2">Medicações</div>
+              <h3 className="text-3xl font-extrabold leading-tight">{patient?.nome || 'Paciente sem nome'}</h3>
+              <div className="flex flex-wrap gap-2 text-sm text-emerald-100 font-semibold mt-3">
+                <span className="px-3 py-1 rounded-full bg-white/10">CPF {cpfFormatado}</span>
+                <span className="px-3 py-1 rounded-full bg-white/10">Uso de medicações: {usoMedicacoes}</span>
+              </div>
+              <div className="text-xs text-emerald-100 mt-3">Unidade: {patient?.ubs_referencia || 'UBS não informada'}</div>
+              {patient?.regiao && <div className="text-xs text-emerald-100 mt-1">Região: {patient.regiao}</div>}
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-sec w-auto px-4 py-2 text-sm font-semibold bg-white/20 border-white/30 text-white" onClick={refreshMedications} disabled={loading}>
+                {loading ? '...' : 'Atualizar'}
+              </button>
+              <button className="btn-sec w-auto px-4 py-2 text-sm font-semibold bg-white/20 border-white/30 text-white" onClick={onClose}>✕ Fechar</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 -mt-10 relative z-10">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-lg overflow-hidden">
+            <div className="px-6 pt-8 pb-6 space-y-8 max-h-[65vh] overflow-y-auto">
+              <section>
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-sm uppercase tracking-[0.35em] text-slate-400 font-bold">Histórico de medicações</h4>
+                  <span className="text-xs text-slate-500 font-semibold">{medications.length} registro{medications.length === 1 ? '' : 's'}</span>
+                </div>
+                {loading && (
+                  <div className="text-center text-slate-400 py-6">Carregando medicações...</div>
+                )}
+                {!loading && medications.length === 0 && (
+                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-6 text-center text-slate-400">
+                    Nenhuma medicação cadastrada para este paciente ainda.
+                  </div>
+                )}
+                {!loading && medications.length > 0 && (
+                  <div className="space-y-4">
+                    {medications.map(med => {
+                      const horariosList = parseHorarios(med.horarios);
+                      const ativo = med.ativo === 'Sim' || med.ativo === true;
+                      return (
+                        <div key={med.medicationId || med.medication_id || med.id} className="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm">
+                          <div className="flex justify-between items-start gap-4">
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.3em] text-slate-400 font-bold mb-1">Nome</div>
+                              <div className="text-lg font-bold text-slate-800">{med.nome_medicamento || med.nome || 'Sem nome'}</div>
+                              <div className="text-xs text-slate-500 mt-1">Tipo: {med.tipo_medicamento || med.tipo || '---'}</div>
+                              {med.dosagem && <div className="text-xs text-slate-500 mt-1">Dosagem: {med.dosagem}</div>}
+                            </div>
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                              {ativo ? 'Ativo' : 'Inativo'}
+                            </span>
+                          </div>
+                          {horariosList.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-emerald-700">
+                              {horariosList.map(h => (
+                                <span key={h} className="px-3 py-1 rounded-full bg-emerald-100">{h}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                            <div>Última prescrição: {formatDateLabel(med.data_prescricao)}</div>
+                            <div>Última dispensação: {formatDateLabel(med.data_dispensacao)}</div>
+                            <div>Início: {formatDateLabel(med.data_inicio)}</div>
+                            <div>Término: {formatDateLabel(med.data_termino)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section className="border border-blue-100 bg-blue-50 rounded-3xl p-6 shadow-inner">
+                <div className="text-xs uppercase tracking-[0.35em] text-blue-500 font-bold mb-4">Adicionar item</div>
+                <div className="grid gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">Nome<span className="text-red-500"> *</span></label>
+                    <input className="input-box" placeholder="Ex.: Metformina" value={form.nome} onChange={e=>handleInput('nome', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">Medicação<span className="text-red-500"> *</span></label>
+                    <select className="input-box" value={form.tipo} onChange={e=>handleInput('tipo', e.target.value)}>
+                      <option value="">Selecione uma opção</option>
+                      {MEDICATION_TYPES.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">Dosagens</label>
+                    <textarea className="input-box" rows={2} placeholder="Ex.: 500mg, 2x ao dia" value={form.dosagem} onChange={e=>handleInput('dosagem', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-2 block">Horários do Dia<span className="text-red-500"> *</span></label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {MEDICATION_TIMES.map(time => {
+                        const selected = form.horarios.includes(time);
+                        return (
+                          <label key={time} className={`px-3 py-2 rounded-xl border text-sm font-semibold text-center cursor-pointer transition-colors ${selected ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-200'}`}>
+                            <input type="checkbox" className="hidden" checked={selected} onChange={()=>toggleHorario(time)} />
+                            {time}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Data de Última Prescrição</label>
+                      <input type="date" className="input-box" value={form.data_prescricao} onChange={e=>handleInput('data_prescricao', e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Data da Última Dispensação</label>
+                      <input type="date" className="input-box" value={form.data_dispensacao} onChange={e=>handleInput('data_dispensacao', e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Início</label>
+                      <input type="date" className="input-box" value={form.data_inicio} onChange={e=>handleInput('data_inicio', e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Término</label>
+                      <input type="date" className="input-box" value={form.data_termino} onChange={e=>handleInput('data_termino', e.target.value)} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-2 block">Ativo</label>
+                    <button type="button" className={`w-full py-3 rounded-full font-bold transition-colors ${form.ativo ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'}`} onClick={()=>handleInput('ativo', !form.ativo)}>
+                      {form.ativo ? 'Ativo' : 'Inativo'}
+                    </button>
+                  </div>
+                  {error && <div className="text-sm text-red-600 font-semibold bg-red-50 border border-red-100 rounded-xl px-4 py-2">{error}</div>}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button className="btn-sec py-3" onClick={() => { setForm({...EMPTY_MEDICATION_FORM}); setError(''); }}>Limpar</button>
+                    <button className="btn-primary py-3" onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar medicação'}</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ProDash = ({user, onLogout}) => {
+  const [mode, setMode] = React.useState('menu');
+  const [list, setList] = useState([]);
+  const [search, setSearch] = useState('');
+  const [formData, setFormData] = useState({});
+  const [activeChat, setActiveChat] = useState(null);
+  const [reply, setReply] = useState('');
+  const [files, setFiles] = useState([]);
+  const [recordingAudio, setRecordingAudio] = useState(false);
+  const [recordingMs, setRecordingMs] = useState(0);
+  const recordingTimerRef = useRef(null);
+  const [verifying, setVerifying] = useState(false);
+  const recorderRef = useRef(null);
+  const [loadingList, setLoadingList] = useState(false);
+  const [newPatientCount, setNewPatientCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [expandedMedia, setExpandedMedia] = useState(null);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [monitorModal, setMonitorModal] = useState(null);
+  const [medicationModalPatient, setMedicationModalPatient] = useState(null);
+  const [medicationCount, setMedicationCount] = useState(0);
+  const [appointmentTotalCount, setAppointmentTotalCount] = useState(0);
+  const [newPatientTotalCount, setNewPatientTotalCount] = useState(0);
+  const [medicationTotalCount, setMedicationTotalCount] = useState(0);
+
+  const addFile = async (newFile) => {
+    if(!newFile) return;
+
+    setVerifying(true);
+    try {
+      const isVideo = newFile.type.startsWith('video');
+      const isImage = newFile.type.startsWith('image');
+      const isAudio = newFile.type.startsWith('audio');
+
+      if (isImage) {
+        const MAX_SIZE = 1 * 1024 * 1024; // 1MB
+        if (newFile.size > MAX_SIZE) throw new Error('A imagem é muito grande. O tamanho máximo é de 1MB.');
+      } else if (isAudio || isVideo) {
+        const MAX_DURATION = 60; // 1 minute
+        const duration = await getMediaDuration(newFile);
+        if (duration > MAX_DURATION) {
+          const mediaType = isAudio ? 'áudio' : 'vídeo';
+          throw new Error(`O ${mediaType} é muito longo. A duração máxima é de 1 minuto.`);
+        }
+        const preview = URL.createObjectURL(newFile);
+        setFiles(prev => [...prev, {file: newFile, preview, duration}]);
+        return;
+      }
+      
+      const preview = URL.createObjectURL(newFile);
+      setFiles(prev => [...prev, {file: newFile, preview, duration: null}]);
+
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const removeFile = idx => {
+    const removed = files[idx];
+    if(removed.preview) URL.revokeObjectURL(removed.preview);
+    setFiles(prev => prev.filter((_,i) => i !== idx));
+  };
+
+  const loadList = async () => {
+    setLoadingList(true);
+    try {
+      const { data: regs, error: regErr } = await supabase.from('registros').select('*').order('updated_at', {ascending:false});
+      if(regErr) throw regErr;
+      const { data: perfs, error: perfErr } = await supabase.from('perfis').select('*');
+      if(perfErr) throw perfErr;
+      const map = {}; perfs?.forEach(p => map[p.patient_id] = p);
+      
+      const enriched = await Promise.all((regs || []).map(async r => {
+        let firstMediaUrl = null;
+        let mediaType = null;
+        
+        const { data: files } = await supabase.storage.from('midias').list(r.registro_id);
+        if(files && files.length > 0) {
+          const first = files[0];
+          const { data } = supabase.storage.from('midias').getPublicUrl(`${r.registro_id}/${first.name}`);
+          firstMediaUrl = data.publicUrl;
+          const ext = first.name.toLowerCase();
+          if(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'].some(e => ext.endsWith(e))) mediaType = 'image';
+          else if(['.mp4', '.webm', '.mov', '.avi', '.mkv'].some(e => ext.endsWith(e))) mediaType = 'video';
+          else if(['.mp3', '.wav', '.ogg', '.m4a', '.aac'].some(e => ext.endsWith(e))) mediaType = 'audio';
+        }
+        
+        return { ...r, perfil: map[r.patient_id] || {}, replies: r.replies_json || [], firstMediaUrl, mediaType };
+      }));
+      
+      setList(enriched);
+      setMode('list');
+    } catch (err) {
+      alert('Falha ao atualizar atendimentos. Verifique a conexão.');
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const checkNewPatients = async () => {
+    const evaluateIncomplete = entries => (entries || []).filter(p => p.nome && p.cpf && (!p.foto_url || !p.genero || !p.hipertensao));
+    try {
+      const { data: perfs } = await supabase.from('perfis').select('patient_id, cpf, nome, foto_url, genero, hipertensao, uso_medicacoes');
+      const allPerfis = perfs || [];
+      const incomplete = evaluateIncomplete(allPerfis);
+      setNewPatientTotalCount(allPerfis.length);
+      setNewPatientCount(incomplete.length);
+    } catch (error) {
+      const localPerfis = await db.perfil.toArray();
+      const incompleteLocal = evaluateIncomplete(localPerfis);
+      setNewPatientTotalCount(localPerfis.length);
+      setNewPatientCount(incompleteLocal.length);
+    }
+  };
+
+  const checkPendingCount = async () => {
+    const countPending = entries => (entries || []).filter(r => r.status === 'pendente' || r.status === 'em_analise');
+    try {
+      const { data: regs } = await supabase.from('registros').select('status');
+      const allRegistros = regs || [];
+      const pending = countPending(allRegistros);
+      setPendingCount(pending.length);
+      setAppointmentTotalCount(allRegistros.length);
+    } catch (error) {
+      const localRegistros = await db.registros.toArray();
+      const pendingLocal = countPending(localRegistros);
+      setPendingCount(pendingLocal.length);
+      setAppointmentTotalCount(localRegistros.length);
+    }
+  };
+
+  const handleMonitorPatient = async (patient) => {
+    if(!patient) return;
+    const patientIdBase = patient.patient_id || patient.patientId || (patient.cpf ? `cpf-${String(patient.cpf).replace(/\D/g,'')}` : '');
+    if(!patientIdBase) {
+      alert('Paciente sem identificador válido.');
+      return;
+    }
+
+    try {
+      let registro = null;
+
+      if(navigator.onLine) {
+        const { data: regs, error } = await supabase.from('registros')
+          .select('*')
+          .eq('patient_id', patientIdBase)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if(error) throw error;
+        if(regs && regs.length > 0) registro = regs[0];
+      }
+
+      if(!registro) {
+        const locais = await db.registros.where('patientId').equals(patientIdBase).toArray();
+        if(locais.length > 0) {
+          locais.sort((a,b) => {
+            const dateA = new Date(a.updatedAt || a.updated_at || a.createdAt || a.created_at || 0).getTime();
+            const dateB = new Date(b.updatedAt || b.updated_at || b.createdAt || b.created_at || 0).getTime();
+            return dateB - dateA;
+          });
+          registro = locais[0];
+        }
+      }
+
+      if(!registro) {
+        alert('Nenhum registro de monitoramento encontrado para este paciente.');
+        return;
+      }
+
+      let perfil = patient;
+      if(navigator.onLine) {
+        const { data: perfilData } = await supabase.from('perfis').select('*').eq('patient_id', patientIdBase).maybeSingle();
+        if(perfilData) perfil = perfilData;
+      } else {
+        const localPerfil = await db.perfil.where('patientId').equals(patientIdBase).first();
+        if(localPerfil) perfil = localPerfil;
+      }
+
+      const repliesArray = Array.isArray(registro.replies_json) ? registro.replies_json : (Array.isArray(registro.replies) ? registro.replies : []);
+      const registroId = registro.registro_id || registro.registroId || registro.id || `monitor-${Date.now()}`;
+      const enrichedPerfil = { ...perfil, patient_id: patientIdBase, patientId: patientIdBase };
+      const enrichedRegistro = {
+        ...registro,
+        registro_id: registroId,
+        replies: repliesArray,
+        perfil: enrichedPerfil
+      };
+
+      setSelectedPatient(null);
+      setMedicationModalPatient(null);
+      setMonitorModal({ registro: enrichedRegistro, perfil: enrichedPerfil });
+      setMode(prev => prev === 'medication_patient_detail' ? 'medication_list' : prev);
+    } catch (error) {
+      console.error('Falha ao abrir monitoramento:', error);
+      alert('Não foi possível abrir o monitoramento agora.');
+    }
+  };
+
+  const handleManageMedications = (patient) => {
+    if(!patient) return;
+    const patientIdBase = patient.patient_id || patient.patientId || (patient.cpf ? `cpf-${String(patient.cpf).replace(/\D/g,'')}` : '');
+    if(!patientIdBase) {
+      alert('Paciente sem identificador válido.');
+      return;
+    }
+    const normalizedCpf = patient.cpf ? String(patient.cpf).replace(/\D/g,'') : (patientIdBase.startsWith('cpf-') ? patientIdBase.replace('cpf-','') : '');
+    const normalized = {
+      ...patient,
+      patient_id: patientIdBase,
+      patientId: patientIdBase,
+      cpf: normalizedCpf
+    };
+    setSelectedPatient(null);
+    setMonitorModal(null);
+    setMedicationModalPatient(normalized);
+    setMode(prev => prev === 'medication_patient_detail' ? 'medication_list' : prev);
+  };
+
+  const checkMedicationCount = async () => {
+    const normalizePatientKey = entry => {
+      if(!entry) return null;
+      if(entry.patient_id) return entry.patient_id;
+      if(entry.patientId) return entry.patientId;
+      const cpfBase = entry.cpf || entry.cpf_paciente;
+      if(cpfBase) return `cpf-${String(cpfBase).replace(/\D/g,'')}`;
+      return null;
+    };
+
+    const computeStats = (perfis, meds) => {
+      const totalPerfis = Array.isArray(perfis) ? perfis.length : 0;
+      const requiresMedication = new Set();
+      (perfis || []).forEach(perf => {
+        const key = normalizePatientKey(perf);
+        if(!key) return;
+        if(patientUsesMedication(perf?.uso_medicacoes || perf?.usoMedicacoes || '')) {
+          requiresMedication.add(key);
+        }
+      });
+
+      const medicatedPatients = new Set();
+      (meds || []).forEach(med => {
+        const key = normalizePatientKey(med);
+        if(!key) return;
+        if(isMedicationActiveValue(med.ativo)) medicatedPatients.add(key);
+      });
+
+      let missing = 0;
+      requiresMedication.forEach(key => {
+        if(!medicatedPatients.has(key)) missing += 1;
+      });
+
+      return { total: totalPerfis, missing };
+    };
+
+    try {
+      if(navigator.onLine) {
+        const [{ data: perfsData, error: perfErr }, { data: medsData, error: medsErr }] = await Promise.all([
+          supabase.from('perfis').select('patient_id, cpf, uso_medicacoes'),
+          supabase.from('medicamentos').select('patient_id, cpf_paciente, ativo')
+        ]);
+        if(perfErr) throw perfErr;
+        if(medsErr) throw medsErr;
+        if(medsData && medsData.length > 0) {
+          await db.transaction('rw', db.medicamentos, async () => {
+            for(const med of medsData) {
+              await db.medicamentos.put({
+                ...med,
+                medicationId: med.medication_id || med.medicationId,
+                patientId: med.patient_id || med.patientId || (med.cpf_paciente ? `cpf-${String(med.cpf_paciente).replace(/\D/g,'')}` : undefined),
+                synced: 1
+              });
+            }
+          });
+        }
+        const stats = computeStats(perfsData || [], medsData || []);
+        setMedicationTotalCount(stats.total);
+        setMedicationCount(stats.missing);
+        return;
+      }
+    } catch (err) {
+      console.error('Falha ao calcular contagem de medicamentos remota:', err);
+    }
+
+    const [localPerfis, localMeds] = await Promise.all([db.perfil.toArray(), db.medicamentos.toArray()]);
+    const localStats = computeStats(localPerfis, localMeds);
+    setMedicationTotalCount(localStats.total);
+    setMedicationCount(localStats.missing);
+  };
+
+  const showNewPatients = async () => {
+    const buildCards = source => (source || []).map(p => ({
+      registro_id: 'perfil-'+(p.patient_id || p.patientId || p.id || p.cpf || Math.random()),
+      patient_id: p.patient_id || p.patientId,
+      perfil: p,
+      status: (!p.foto_url || !p.genero || !p.hipertensao) ? 'pendente' : 'completo',
+      texto: (!p.foto_url || !p.genero || !p.hipertensao) ? 'Cadastro básico aguardando prontuário' : 'Cadastro profissional completo',
+      updated_at: p.updated_at || p.created_at || p.updatedAt || p.createdAt || new Date().toISOString(),
+      replies: []
+    }));
+
+    let items = [];
+    try {
+      if(navigator.onLine) {
+        const { data: perfs } = await supabase.from('perfis').select('*');
+        items = buildCards(perfs);
+      } else {
+        const localPerfis = await db.perfil.toArray();
+        items = buildCards(localPerfis);
+      }
+    } catch (error) {
+      const fallbackPerfis = await db.perfil.toArray();
+      items = buildCards(fallbackPerfis);
+    }
+    setList(items);
+    setMode('new_patients');
+  };
+
+  const handleSearch = async () => {
+    if(!search) return alert('Digite CPF');
+    const clean = search.replace(/\D/g,'');
+    if(!navigator.onLine){
+      const local = await db.perfil.where('cpf').equals(clean).first();
+      if(local){ setFormData({...local, cpf:mascaraCPF(local.cpf)}); }
+      else { setFormData({cpf:mascaraCPF(clean)}); }
+      setMode('form'); return;
+    }
+    try {
+      const { data } = await supabase.from('perfis').select('*').eq('cpf', clean).maybeSingle();
+      if(data){ setFormData({...data, cpf:mascaraCPF(data.cpf)}); }
+      else { setFormData({cpf:mascaraCPF(clean)}); }
+      setMode('form');
+    } catch {
+      setFormData({cpf:mascaraCPF(clean)});
+      setMode('form');
+    }
+  };
+
+  const saveForm = async (f) => {
+    const clean = f.cpf.replace(/\D/g,'');
+    const payload = { ...f, patient_id: 'cpf-'+clean, cpf: clean, updated_at: new Date().toISOString() };
+    await supabase.from('perfis').upsert(payload, { onConflict: 'patient_id' });
+    alert('Salvo!'); setMode('menu'); setSearch('');
+  };
+
+  const sendReply = async () => {
+    if(!reply && files.length === 0) return;
+    if((activeChat.replies?.length || 0) >= 5) return alert('Limite de 5 interações atingido neste registro. Máximo: 5 trocas.');
+    try {
+      const urls = [];
+      for(const item of files) {
+        const path = `${activeChat.registro_id}/pro_${Date.now()}_${item.file.name}`;
+        const { error: uploadErr } = await supabase.storage.from('midias').upload(path, item.file, { upsert: true, contentType: item.file.type });
+        if(uploadErr) throw uploadErr;
+        const {data} = supabase.storage.from('midias').getPublicUrl(path);
+        urls.push(data.publicUrl);
+      }
+
+      const newR = { 
+        from:'pro', 
+        pro_name:user.nome, 
+        pro_ubs:user.ubs || '', 
+        pro_cpf:user.cpf || '', 
+        text:reply, 
+        url: urls.length > 0 ? urls[0] : null,
+        urls: urls,
+        at:new Date().toISOString() 
+      };
+      const updated = [...activeChat.replies, newR];
+      const resumo = reply || (files.length > 0 ? 'Mídia enviada pelo profissional' : 'Nova interação');
+      const { error: regErr } = await supabase.from('registros').update({ status:'respondido', updated_at:new Date().toISOString(), replies_json:updated, resposta:resumo }).eq('id', activeChat.id);
+      if(regErr) throw regErr;
+      alert('Enviado'); setReply(''); 
+      files.forEach(f => { if(f.preview) URL.revokeObjectURL(f.preview); });
+      setFiles([]);
+      setActiveChat(prev=>prev?{...prev,replies:updated,resposta:resumo}:prev); 
+      loadList();
+    } catch (err) {
+      console.error('Falha ao enviar resposta:', err);
+      alert('Não foi possível enviar. Verifique conexão e tente novamente.');
+    }
+  };
+
+  const pickFile = e => {
+    const f = e.target.files[0];
+    if(f) addFile(f);
+    e.target.value = null;
+  };
+
+  const startAudioRecordingPro = async () => {
+    if(!navigator.mediaDevices?.getUserMedia) return alert('Microfone indisponível.');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = evt => { if(evt.data.size) chunks.push(evt.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type:'audio/webm' });
+        const audioFile = new File([blob], `pro_audio_${Date.now()}.webm`, { type:'audio/webm' });
+        addFile(audioFile);
+        stream.getTracks().forEach(t=>t.stop());
+        recorderRef.current = null;
+        setRecordingAudio(false);
+        setRecordingMs(0);
+        if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      };
+      recorder.start();
+      setRecordingMs(0);
+      if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(()=>{
+        setRecordingMs(ms => {
+          const next = ms + 200;
+          if(next >= 60000) {
+            recorder.stop();
+            return 60000;
+          }
+          return next;
+        });
+      },200);
+      recorderRef.current = { recorder, stream };
+      setRecordingAudio(true);
+    } catch(e) {
+      alert('Não foi possível iniciar a gravação.');
+    }
+  };
+
+  const stopAudioRecordingPro = () => {
+    if(recorderRef.current?.recorder) recorderRef.current.recorder.stop();
+  };
+
+  useEffect(()=>{
+    return () => {
+      files.forEach(f => { if(f.preview) URL.revokeObjectURL(f.preview); });
+      if(recorderRef.current?.stream){
+        recorderRef.current.stream.getTracks().forEach(t=>t.stop());
+      }
+      if(recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if(mode === 'menu'){
+      checkNewPatients();
+      checkPendingCount();
+      checkMedicationCount();
+    }
+  }, [mode]);
+
+  const hasVideo = files.some(f => f.file.type.startsWith('video'));
+  const hasImage = files.some(f => f.file.type.startsWith('image'));
+  const hasAudio = files.some(f => f.file.type.startsWith('audio'));
+
+  const overlays = (
+    <>
+      {monitorModal && (
+        <MonitorConversationModal
+          data={monitorModal}
+          onClose={() => { setMonitorModal(null); setExpandedMedia(null); }}
+          onExpandMedia={(url, type) => setExpandedMedia({ url, type })}
+        />
+      )}
+      {medicationModalPatient && (
+        <MedicationEditorModal
+          patient={medicationModalPatient}
+          onClose={() => setMedicationModalPatient(null)}
+        />
+      )}
+      {expandedMedia && (
+        <MediaModal url={expandedMedia.url} type={expandedMedia.type} onClose={()=>setExpandedMedia(null)} />
+      )}
+    </>
+  );
+
+  let content = null;
+  const refreshAllNow = useCallback(async () => {
+    try {
+      await Promise.all([
+        checkNewPatients(),
+        checkPendingCount(),
+        checkMedicationCount()
+      ]);
+    } catch (e) {
+      /* silencioso */
+    }
+  }, [checkNewPatients, checkPendingCount, checkMedicationCount]);
+
+  const formatRatio = (missing, total) => {
+    const safeMissing = Number.isFinite(missing) ? missing : 0;
+    const safeTotal = Number.isFinite(total) ? total : 0;
+    return `${safeMissing}/${safeTotal}`;
+  };
+  const pendingLabel = formatRatio(pendingCount, appointmentTotalCount);
+  const newPatientLabel = formatRatio(newPatientCount, newPatientTotalCount);
+  const medicationLabel = formatRatio(medicationCount, medicationTotalCount);
+  const pendingSubtitle = appointmentTotalCount > 0
+    ? `Pendentes ${pendingCount} / ${appointmentTotalCount}`
+    : 'Nenhum atendimento encontrado ainda';
+  const newPatientSubtitle = newPatientTotalCount > 0
+    ? `Prontuários pendentes ${newPatientCount} / ${newPatientTotalCount}`
+    : 'Nenhum cadastro básico pendente';
+  const medicationSubtitle = medicationTotalCount > 0
+    ? `Falta registrar medicação para ${medicationCount} de ${medicationTotalCount}`
+    : 'Nenhum paciente marcou uso de medicações';
+
+  if(mode === 'menu') {
+    content = (
+      <div className="p-6 fade-in">
+        <div className="flex justify-between items-center mb-8">
+          <div><h2 className="text-xl font-bold">{user.nome.split(' ')[0]}</h2><p className="text-gray-500 text-sm">{user.ubs}</p></div>
+          <button onClick={onLogout} className="text-red-500 font-bold text-sm">SAIR</button>
+        </div>
+        <div className="grid gap-4">
+          <div className="flex items-center gap-3 text-sm text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4 font-semibold shadow-sm">
+            <button onClick={refreshAllNow} className="btn-primary w-auto px-5 py-3 text-sm font-extrabold shadow" style={{width:'auto'}}>
+              ⟳ Atualizar agora
+            </button>
+            <span>Use o botão para atualizar atendimentos, cadastros e medicações. Mesmo com 0 pendências, os painéis ficam acessíveis.</span>
+          </div>
+          <button className="big-btn" onClick={loadList}>
+            <div className="big-btn-icon">📂</div>
+            <div className="font-bold text-lg">Painel de Atendimentos ({pendingLabel})</div>
+            <div className="text-xs text-gray-600">{pendingSubtitle}</div>
+          </button>
+          <button className="big-btn" onClick={showNewPatients}>
+            <div className="big-btn-icon">🆕</div>
+            <div className="font-bold text-lg">Novos Cadastros ({newPatientLabel})</div>
+            <div className="text-xs text-gray-600">{newPatientSubtitle}</div>
+          </button>
+          <button className="big-btn" onClick={() => setMode('medication_list')}>
+              <div className="big-btn-icon">💊</div>
+              <div className="font-bold text-lg">Medicamentos ({medicationLabel})</div>
+              <div className="text-xs text-gray-600">{medicationSubtitle}</div>
+          </button>
+          <div className="card border-2 border-slate-200 mt-4">
+            <div className="text-center font-bold mb-4">Gerir Prontuário</div>
+            <div className="flex gap-2">
+              <input className="input-box mb-0" placeholder="Buscar CPF..." value={search} onChange={e=>setSearch(mascaraCPF(e.target.value))} />
+              <button className="btn-primary w-auto px-6" onClick={handleSearch}>🔍</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  } else if (mode === 'form') {
+    content = (
+      <div className="p-4 fade-in">
+        <div className="flex items-center gap-3 mb-4"><button onClick={()=>setMode('menu')} className="text-2xl font-bold text-gray-400">←</button><h2 className="text-xl font-bold">Ficha Médica</h2></div>
+        <div className="card"><FichaMedica initialData={formData} onSave={saveForm} onCancel={()=>setMode('menu')} /></div>
+      </div>
+    );
+  } else if (mode === 'medication_list') {
+    content = (
+      <MedicationManagementList
+        onPatientClick={(patient) => {
+          setSelectedPatient(patient);
+          setMode('medication_patient_detail');
+        }}
+        onBack={() => setMode('menu')}
+      />
+    );
+  } else if (mode === 'medication_patient_detail') {
+    content = (
+      <MedicationPatientDetail
+        patient={selectedPatient}
+        onBack={() => { setSelectedPatient(null); setMode('medication_list'); }}
+        onEditProfile={(patient) => {
+          const cpfMask = patient.cpf ? mascaraCPF(String(patient.cpf)) : '';
+          setFormData({...patient, cpf: cpfMask});
+          setMode('form');
+        }}
+        onMonitor={patient => handleMonitorPatient(patient)}
+        onManageMedications={patient => handleManageMedications(patient)}
+      />
+    );
+  } else if (mode === 'new_patients') {
+    content = (
+      <div className="p-4 fade-in">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-emerald-900">Novos Cadastros ({list.length})</h2>
+            <p className="text-xs text-emerald-600 font-semibold">Atualizado automaticamente a cada 5s</p>
+          </div>
+          <button onClick={()=>setMode('menu')} className="btn-sec w-auto px-4 py-2 text-sm font-semibold">Menu</button>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">Pacientes cadastrados (clique para ver/editar o prontuário):</p>
+        {list.length === 0 && (
+          <div className="card border border-emerald-100 text-sm text-emerald-700 bg-emerald-50">
+            Nenhum cadastro encontrado. Use a busca acima para localizar pacientes e atualizar dados quando necessário.
+          </div>
+        )}
+        {list.map(item => {
+          const p = item.perfil;
+          const cpfFormat = p.cpf ? mascaraCPF(p.cpf) : '---';
+          const idadeLabel = p.nascimento ? calcAge(p.nascimento) : 'Idade não informada';
+          const statusLabel = item.status === 'pendente' ? 'CADASTRO PENDENTE' : 'CADASTRO OK';
+          const statusClass = item.status === 'pendente'
+            ? 'bg-red-100 text-red-700 border border-red-200'
+            : 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+          const medStatusLabel = patientUsesMedication(p.uso_medicacoes || p.usoMedicacoes || '')
+            ? 'DECLAROU USO DE MEDICAÇÃO'
+            : 'NÃO DECLAROU USO DE MEDICAÇÃO';
+          const medStatusClass = patientUsesMedication(p.uso_medicacoes || p.usoMedicacoes || '')
+            ? 'bg-amber-100 text-amber-700 border border-amber-200'
+            : 'bg-slate-100 text-slate-600 border border-slate-200';
+          return (
+            <div key={item.registro_id} onClick={()=>{ setFormData({...p, cpf:cpfFormat}); setMode('form'); }} className="card cursor-pointer transition-colors hover:bg-emerald-50 border border-emerald-100">
+              <div className="flex justify-between mb-2">
+                <div className="flex gap-2 flex-wrap">
+                  <span className={`badge ${statusClass}`}>{statusLabel}</span>
+                  <span className={`badge ${medStatusClass}`}>{medStatusLabel}</span>
+                </div>
+                <span className="text-xs text-gray-400">{formatDateISO(item.updated_at)}</span>
+              </div>
+              <div className="font-bold text-lg">{p.nome || 'Sem nome'}</div>
+              <div className="text-sm text-gray-500">CPF: {cpfFormat}</div>
+              <div className="text-xs text-gray-400">{p.regiao || 'Região não informada'}{idadeLabel ? ` • ${idadeLabel}` : ''}</div>
+              <div className="text-xs text-emerald-700 font-semibold mt-2">📋 Clique para ver/editar o prontuário</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  } else if (mode === 'list') {
+    if(activeChat) {
+      const perfil = activeChat.perfil || {};
+      const cpfFormatado = perfil.cpf ? mascaraCPF(perfil.cpf) : '---';
+      const idadeStr = perfil.nascimento ? calcAge(perfil.nascimento) : 'Idade não informada';
+      content = (
+        <div className="p-4 fade-in pb-40">
+          <button onClick={()=>setActiveChat(null)} className="mb-4 text-gray-500 font-bold">← VOLTAR</button>
+          <div className="card">
+            <div className="flex justify-between">
+              <div>
+                <div className="font-bold text-lg">{perfil.nome || 'Paciente sem nome'}</div>
+                <div className="text-sm text-gray-500">CPF: {cpfFormatado}</div>
+                <div className="text-xs text-gray-500">{idadeStr}{perfil.regiao ? ` • ${perfil.regiao}` : ''}</div>
+              </div>
+              <button onClick={()=>{setFormData(activeChat.perfil); setMode('form')}} className="btn-sec w-auto text-xs px-3 py-1 h-8">FICHA</button>
+            </div>
+            {activeChat.texto && (
+              <div className="bg-slate-50 p-3 rounded-lg mt-4">
+                <div className="text-xs font-bold text-gray-500 mb-1">MENSAGEM INICIAL</div>
+                <div className="text-base">{activeChat.texto}</div>
+              </div>
+            )}
+            {activeChat.registro_id && (
+              <div className="mt-4">
+                <div className="text-xs uppercase tracking-widest text-gray-500 mb-2 font-bold">📎 Anexos do Paciente</div>
+                <MediasDoRegistro registroId={activeChat.registro_id} onMediaClick={(url, type)=>setExpandedMedia({url, type})} />
+              </div>
+            )}
+            {activeChat.replies && activeChat.replies.length > 0 && (
+              <div className="mt-6">
+                <div className="text-xs uppercase tracking-widest text-gray-500 mb-3 font-bold">💬 Histórico de Conversa</div>
+                <div className="space-y-4">
+                  {activeChat.replies.map((r,i)=>{
+                    const allUrls = r.urls && Array.isArray(r.urls) ? r.urls : (r.url ? [r.url] : []);
+                    const isPro = r.from === 'pro';
+                    const replyDate = r.at || r.timestamp || r.updated_at || r.created_at || r.data || null;
+                    return (
+                      <div key={i} className={`flex ${isPro ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${isPro ? 'bg-green-100 border border-green-200' : 'bg-white border border-gray-200'}`}>
+                          <div className="text-xs font-bold mb-2" style={{color: isPro ? '#166534' : '#64748b'}}>
+                            {isPro ? '🩺 Você (Profissional)' : '👤 Paciente'}
+                          </div>
+                          {r.text && <div className="text-base mb-2">{r.text}</div>}
+                          {allUrls.length > 0 && (
+                            <div className="mt-3 space-y-3">
+                              {allUrls.map((url, idx) => {
+                                const isVideo = ['.mp4', '.webm', '.mov', '.avi', '.mkv', 'video'].some(e => url.includes(e));
+                                const isAudio = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', 'audio'].some(e => url.includes(e));
+                                if(isAudio) {
+                                  return (
+                                    <div key={idx} className="bg-white rounded-lg p-3 border">
+                                      <div className="text-xs text-gray-500 mb-2 font-bold">🎵 Áudio</div>
+                                      <audio controls src={url} className="w-full max-w-xs" style={{height: '40px'}} />
+                                    </div>
+                                  );
+                                }
+                                if(isVideo) {
+                                  return (
+                                    <div key={idx} className="bg-white rounded-lg overflow-hidden border-2 border-gray-300">
+                                      <div className="bg-gray-50 px-3 py-2 text-xs text-gray-600 font-bold border-b">🎥 Vídeo</div>
+                                      <video controls src={url} className="w-full max-w-sm" style={{maxHeight: '400px'}} />
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <img 
+                                    key={idx} 
+                                    src={url} 
+                                    alt="foto" 
+                                    className="w-full max-w-sm rounded-lg border-2 border-gray-300 cursor-pointer hover:border-green-500 transition-all shadow-sm" 
+                                    onClick={()=>setExpandedMedia({url, type: 'image'})}
+                                  />
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-400 mt-2">{replyDate ? formatDateISO(replyDate) : ''}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t rounded-t-3xl shadow-2xl">
+            <textarea className="input-box h-20" placeholder="Resposta..." value={reply} onChange={e=>setReply(e.target.value)} />
+            <p className="text-xs text-gray-500 mb-2" dangerouslySetInnerHTML={{ __html: 'Você pode enviar <b>ou</b> um vídeo (máx 1 min), <b>ou</b> uma foto (máx 1MB) e um áudio (máx 1 min).' }} />
+            <div className="media-row mt-2">
+              <label className={`btn-media ${hasVideo || hasImage ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                📷 Foto
+                <input type="file" accept="image/*" capture="environment" className="hidden-input" onChange={pickFile} disabled={hasVideo || hasImage}/>
+              </label>
+              <label className={`btn-media ${hasVideo || hasImage || hasAudio ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                🎥 Vídeo
+                <input type="file" accept="video/*" capture="environment" className="hidden-input" onChange={pickFile} disabled={hasVideo || hasImage || hasAudio}/>
+              </label>
+              <button type="button" className={`btn-media ${recordingAudio?'active':''} ${hasVideo || hasAudio ? 'opacity-50 cursor-not-allowed' : ''}`} onClick={()=> recordingAudio ? stopAudioRecordingPro() : startAudioRecordingPro()} disabled={hasVideo || hasAudio}>
+                {recordingAudio?'⏹️ Parar':'🎙️ Gravar'}
+              </button>
+            </div>
+            {recordingAudio && <div className="text-xs text-amber-700 font-semibold mb-2">Tempo: {formatDuration(recordingMs/1000)} / 01:00</div>}
+            {verifying && <div className="text-center text-gray-500 my-2">Verificando arquivo...</div>}
+            {files.length > 0 && (
+              <div className="mb-2 space-y-2">
+                {files.map((item, idx) => (
+                  <div key={idx} className="text-xs bg-green-50 p-2 rounded border border-green-200">
+                    <div className="font-bold text-green-600">{item.file.name}</div>
+                    {item.duration != null && <div className="text-[11px] text-slate-600">Duração: {formatDuration(item.duration)}</div>}
+                    {item.file.type.startsWith('audio') && <audio controls className="w-full max-w-xs mt-1" src={item.preview} />}
+                    {item.file.type.startsWith('video') && <video controls className="w-full max-w-sm mt-1" src={item.preview} />}
+                    {item.file.type.startsWith('image') && <img src={item.preview} alt="preview" className="w-full max-w-sm mt-1 rounded" />}
+                    <button className="btn-sec mt-1 text-xs py-1" onClick={()=>removeFile(idx)}>Remover</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn-primary" onClick={sendReply} disabled={verifying}>{verifying ? 'VERIFICANDO...' : 'ENVIAR'}</button>
+          </div>
+        </div>
+      );
+    } else {
+      content = (
+        <div className="p-4 fade-in">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Atendimentos</h2>
+              <div className="flex gap-2">
+                <button onClick={()=>setMode('menu')} className="btn-sec w-auto">Menu</button>
+              </div>
+            </div>
+          {list.map(r => {
+            const cpfFormat = r.perfil?.cpf ? mascaraCPF(r.perfil.cpf) : '---';
+            const idadeLabel = r.perfil?.nascimento ? calcAge(r.perfil.nascimento) : 'Idade não informada';
+            const regiaoLabel = r.perfil?.regiao || 'Região não informada';
+            const statusLabel = r.status === 'respondido' ? 'ATENDIMENTO OK' : 'ATENDIMENTO PENDENTE';
+            const statusClass = r.status === 'respondido'
+              ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+              : 'bg-amber-100 text-amber-700 border border-amber-200';
+            const medStatusLabel = patientUsesMedication(r.perfil?.uso_medicacoes || r.perfil?.usoMedicacoes || '')
+              ? 'DECLAROU USO DE MEDICAÇÃO'
+              : 'NÃO DECLAROU USO DE MEDICAÇÃO';
+            const medStatusClass = patientUsesMedication(r.perfil?.uso_medicacoes || r.perfil?.usoMedicacoes || '')
+              ? 'bg-amber-100 text-amber-700 border border-amber-200'
+              : 'bg-slate-100 text-slate-600 border border-slate-200';
+
+            const openFicha = () => {
+              const perfil = r.perfil || {};
+              const cpfMask = perfil.cpf ? mascaraCPF(String(perfil.cpf)) : '';
+              setFormData({...perfil, cpf: cpfMask});
+              setMode('form');
+            };
+
+            return (
+              <div key={r.registro_id} className="card transition-colors hover:bg-emerald-50 border border-emerald-100">
+                <div className="flex justify-between mb-2">
+                  <div className="flex gap-2 flex-wrap">
+                    <span className={`badge ${statusClass}`}>{statusLabel}</span>
+                    <span className={`badge ${medStatusClass}`}>{medStatusLabel}</span>
+                  </div>
+                  <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{formatDateISO(r.updated_at)}</span>
+                </div>
+                <div className="font-bold text-lg text-slate-900">{r.perfil?.nome || 'Paciente'}</div>
+                <div className="text-sm text-gray-500">CPF: {cpfFormat}</div>
+                <div className="text-xs text-gray-400">{regiaoLabel}{idadeLabel ? ` • ${idadeLabel}` : ''}</div>
+                <div className="text-sm text-gray-600 mt-1">{r.texto || 'Mídia enviada'}</div>
+                <div className="flex gap-2 mt-3">
+                  <button className="btn-sec w-auto text-xs px-3 py-2" onClick={openFicha}>📋 Ver/editar prontuário</button>
+                  <button className="btn-primary w-auto text-xs px-3 py-2" style={{width:'auto'}} onClick={()=>setActiveChat(r)}>💬 Ver conversa</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+  }
+
+  return (
+    <>
+      {overlays}
+      {content}
+    </>
+  );
+};
+
+// --- APP ROOT ---
+const App = () => {
+  const [route, setRoute] = useState('welcome');
+  const [user, setUser] = useState(null);
+  const [tempCpf, setTempCpf] = useState('');
+  const [online, setOnline] = useState(navigator.onLine);
+  const [audioDurations, setAudioDurations] = useState({});
+  const learnItems = useMemo(() => ([
+    {
+      title: 'Hipertensão Arterial',
+      kicker: 'Hipertensão Arterial: o que é e como tratar?',
+      body: [
+        'A hipertensão, ou pressão alta, é a força do sangue contra as artérias acima do normal. Com o tempo pode causar infarto, derrame, insuficiência renal e perda da visão.',
+        'É a “inimiga silenciosa”: quase não dá sintomas. Pressão alta é igual ou maior que 14 por 9 (140/90 mmHg). Meça regularmente.',
+        'Principais fatores: sal em excesso, sedentarismo, obesidade, estresse, tabagismo, álcool, genética.',
+        'Tratamento: mudanças de estilo de vida (menos sal, exercício, peso saudável, sem cigarro/álcool, menos estresse, alimentação equilibrada) e, se preciso, remédios anti-hipertensivos indicados pelo médico. Tome todos os dias mesmo controlada.'
+      ],
+      video: 'https://www.youtube.com/watch?v=B3sm1ey3VyI',
+      audio: 'Hipertensão.mp3'
+    },
+    {
+      title: 'Diabetes',
+      kicker: 'Diabetes: tipos e controle',
+      body: [
+        'O diabetes é dificuldade de controlar o açúcar no sangue. Tipo 1 costuma surgir na infância; tipo 2 é mais comum em adultos e ligado ao estilo de vida.',
+        'Sem controle, pode afetar rins, visão, coração e levar a amputações. Dá para viver bem: alimentação saudável, atividade física, controle de peso e, se necessário, medicamentos ou insulina.',
+        'Procure a UBS, converse com o ACS e use o chat se disponível. Prevenir e acompanhar é o melhor caminho.'
+      ],
+      video: 'https://www.youtube.com/watch?v=zSy7LP_BgI0',
+      audio: 'Diabetes.mp3'
+    },
+    {
+      title: 'Cuidados Infantis',
+      kicker: 'Primeira infância: 0 a 6 anos',
+      body: [
+        'A primeira infância é a fase mais importante do desenvolvimento. Alimentação saudável, carinho, brincar, conversar e atenção são essenciais.',
+        'Além de crescer, a criança desenvolve emoções, linguagem e relações. Precisa de vínculos seguros, rotinas, vacinação em dia e acompanhamento na UBS.',
+        'Converse com o ACS e use o chat se disponível. Investir na primeira infância garante futuro melhor para a criança e a família.'
+      ],
+      video: 'https://www.youtube.com/watch?v=YIbEctyZLgA',
+      audio: 'Infância.mp3'
+    },
+    {
+      title: 'Gestação',
+      kicker: 'Cuidados gerais durante a gestação',
+      body: [
+        'Pré-natal: consultas regulares e exames conforme orientação.',
+        'Alimentação: frutas, verduras, legumes, integrais e proteínas magras; evitar ultraprocessados, excesso de açúcar, sal e gorduras; sem álcool e cigarro; hidratação adequada.',
+        'Suplementação: seguir prescrição de ácido fólico, ferro e cálcio.',
+        'Atividade física leve a moderada com liberação médica; evitar alto impacto.',
+        'Medicamentos: nunca se automedicar; sempre consultar o médico.',
+        'Saúde emocional: apoio, relaxamento, buscar ajuda se ansiedade ou tristeza intensa.',
+        'Prevenção de infecções: higiene bucal, vacinas em dia, evitar contato com doentes.',
+        'Sono: priorizar boas noites, posições confortáveis de lado para circulação.'
+      ],
+      video: 'https://www.youtube.com/watch?v=yAoDNAB_7BE',
+      audio: 'Gestação.mp3'
+    }
+  ]), []);
+  useEffect(()=>{
+    const f = ()=>setOnline(navigator.onLine);
+    window.addEventListener('online', f); window.addEventListener('offline', f);
+    return ()=>{ window.removeEventListener('online', f); window.removeEventListener('offline', f); };
+  }, []);
+
+  // Auto Login Paciente
+  useEffect(()=>{ 
+    const pid = localStorage.getItem('currentProfileId');
+    if(pid) {
+      db.perfil.where('patientId').equals(pid).first().then(p => {
+        if(p) { setUser(p); setRoute('patient_dash'); syncManager(); }
+      });
+    }
+  }, []);
+
+  // Pré-carrega duração dos áudios do "Saiba Mais"
+  useEffect(() => {
+    if(route !== 'learn') return;
+    learnItems.forEach(item => {
+      if(!item.audio) return;
+      const src = `audios/${encodeURIComponent(item.audio)}`;
+      const audio = new Audio(src);
+      const onMeta = () => setAudioDurations(prev => prev[item.audio] ? prev : ({ ...prev, [item.audio]: audio.duration }));
+      audio.addEventListener('loadedmetadata', onMeta, { once: true });
+      audio.load();
+    });
+  }, [route, learnItems]);
+
+  const loginPatient = async (cpf) => {
+    const clean = cpf.replace(/\D/g,'');
+    const p = await db.perfil.where('cpf').equals(clean).first();
+    if(p){ localStorage.setItem('currentProfileId', p.patientId); setUser(p); setRoute('patient_dash'); return; }
+    // Direto para cadastro com CPF preenchido
+    setTempCpf(mascaraCPF(clean));
+    setRoute('patient_reg');
+  };
+
+  const loginPro = (data) => { setUser(data); setRoute('pro_dash'); };
+
+  const sendReg = async (txt, filesArray, type) => {
+    try {
+      const pid = user.patientId || 'local-'+user.id;
+      const rid = uuidv4(); const now = new Date().toISOString();
+      
+      // Salva registro
+      await db.registros.add({ registroId:rid, patientId:pid, deviceId:'dev', texto:txt, tipo:type, status:'pendente', createdAt:now, updatedAt:now, replies:[], synced:0 });
+      
+      // Salva TODOS os arquivos
+      if(filesArray && filesArray.length > 0) {
+        for(const file of filesArray) {
+          await db.midias.add({ registroId:rid, name:file.name, type:file.type, blob:file, synced:0 });
+        }
+      }
+      
+      syncManager(); alert('Salvo!'); setRoute('patient_dash');
+    } catch(e) { alert(e); }
+  };
+
+  const OfflineBanner = () => !online && <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center text-xs py-2 z-50 font-bold">Modo Offline: dados serão salvos localmente</div>;
+
+  if(route === 'welcome') return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-6 fade-in text-center">
+      <OfflineBanner />
+      <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6 text-5xl shadow-lg">🌿</div>
+      <h1 className="text-3xl font-extrabold text-green-900 mb-2">TECENDO SAÚDE</h1>
+      <p className="text-gray-500 mb-10 text-lg">Baixo Amazonas e Tapajós</p>
+      <button className="btn-primary mb-4 py-4 text-lg" onClick={()=>setRoute('login_patient')}>SOU PACIENTE</button>
+      <button className="text-green-700 font-bold text-sm mt-4 p-4" onClick={()=>setRoute('login_pro')}>ÁREA PROFISSIONAL</button>
+      <button className="btn-sec mt-6 w-auto px-6 py-3 font-bold text-green-800 border-green-300" onClick={()=>setRoute('learn')}>ℹ️ Saiba Mais</button>
+    </div>
+  );
+
+  if(route === 'login_patient') return <><OfflineBanner /><PatientLogin onLogin={loginPatient} onRegister={(cpf)=>{setTempCpf(cpf||''); setRoute('patient_reg');}} /></>;
+  
+  if(route === 'patient_reg') return <><OfflineBanner /><CadastroRapido cpfInicial={tempCpf} onFinish={(p)=>{setUser(p); setRoute('patient_dash');}} onCancel={()=>setRoute('welcome')} /></>;
+  
+  if(route === 'patient_dash') return <><OfflineBanner /><PatientDash user={user} onNewMsg={()=>setRoute('patient_new')} onLogout={()=>{localStorage.clear(); window.location.reload()}} /></>;
+  
+  // CORREÇÃO DO ENVIO: Passa 'tipo' corretamente
+  if(route === 'patient_new') return <><OfflineBanner /><NovaMensagem onBack={()=>setRoute('patient_dash')} onSend={sendReg} /></>;
+
+  if(route === 'login_pro') return <><OfflineBanner /><ProAuth onAuth={loginPro} onBack={()=>setRoute('welcome')} /></>;
+  
+  if(route === 'pro_dash') return <><OfflineBanner /><ProDash user={user} onLogout={()=>{setUser(null); setRoute('welcome')}} /></>;
+
+  if(route === 'learn') return (
+    <div className="min-h-screen bg-emerald-50 p-6 fade-in">
+      <OfflineBanner />
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-emerald-700 font-semibold">Conteúdo educativo</p>
+            <h1 className="text-3xl font-extrabold text-emerald-900">Saiba Mais</h1>
+            <p className="text-gray-600">Textos e áudios funcionam offline. Vídeos só funcionam online.</p>
+          </div>
+          <button className="btn-sec w-auto px-5" onClick={()=>setRoute('welcome')}>← Voltar</button>
+        </div>
+
+        {learnItems.map((item, idx) => (
+          <div key={idx} className="bg-white border border-emerald-100 rounded-2xl p-5 shadow-sm">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-emerald-500 font-bold mb-2">{item.title}</div>
+            <h2 className="text-xl font-extrabold text-slate-900 mb-3">{item.kicker}</h2>
+            <div className="space-y-2 text-sm text-slate-700">
+              {item.body.map((p,i)=>(<p key={i}>{p}</p>))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 items-center text-xs font-semibold text-slate-600">
+              <span className="px-3 py-1 rounded-full bg-slate-100">Offline: textos disponíveis</span>
+              {item.audio && <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700">Offline: áudio disponível</span>}
+              {online ? (
+                <a className="px-3 py-1 rounded-full bg-emerald-600 text-white" href={item.video} target="_blank" rel="noopener noreferrer">🎬 Assistir no YouTube (online)</a>
+              ) : (
+                <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-800">Sem internet: vídeo indisponível</span>
+              )}
+            </div>
+            {item.audio && (
+              <div className="mt-3 space-y-2">
+                <audio
+                  controls
+                  preload="metadata"
+                  className="w-full"
+                  src={`audios/${encodeURIComponent(item.audio)}`}
+                >
+                  Seu navegador não suporta áudio.
+                </audio>
+                <div className="text-xs text-slate-600 flex flex-wrap gap-2 items-center">
+                  <span className="px-2 py-1 rounded bg-slate-100">Duração: {audioDurations[item.audio] ? formatDuration(audioDurations[item.audio]) : 'carregando...'}</span>
+                  <span className="px-2 py-1 rounded bg-slate-100">Pode pausar e avançar</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return <Loading text="Carregando..." />;
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
