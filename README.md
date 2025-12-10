@@ -137,6 +137,13 @@ Modelos de tabelas (exemplo resumido):
   - Políticas RLS no Supabase.
   - Criptografia a nível de campo para dados sensíveis se requerido.
   - Backups regulares do banco (Supabase exportações).
+  - Nunca versionar chaves: use `.env`/variáveis do deploy para gerar `env.js` (já ignorado no git) com `window.__ENV = { SUPABASE_URL, SUPABASE_KEY }`. Gere nova chave se alguma foi exposta.
+
+## ⚠️ Limitações e Recomendações
+  - Vídeos hospedados externamente (ej. YouTube) requerem conexão ativa.
+  - O plano gratuito do Supabase tem limitações de storage; controlar uploads de vídeo é importante.
+  - Navegadores antigos ou dispositivos muito antigos podem não suportar MediaRecorder ou IndexedDB de forma estável.
+  - Testar cenários de sincronização com filas de conflitos e retries é essencial.
 
 ---
 
