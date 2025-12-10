@@ -109,12 +109,23 @@ Permissões necessárias no Android:
 
 ## ⚙️ Configuração do Supabase
 
-No topo do `index.html` configure as variáveis:
+### Desenvolvimento local
 
-```javascript
-const SUPABASE_URL = 'https://rucpqwojmgnqibeskaaj.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_...'; // Insira sua Public Key
-```
+1. Crie um arquivo `env.js` (não versionado) com o conteúdo:
+   ```javascript
+   window.__ENV = {
+     SUPABASE_URL: 'https://<sua-instancia>.supabase.co',
+     SUPABASE_KEY: 'sb_publishable_...'
+   };
+   ```
+2. Garanta que o arquivo está na mesma pasta do `index.html` quando rodar localmente.
+
+### Deploy estático no Netlify
+
+1. Adicione no painel do Netlify as variáveis `SUPABASE_URL` e `SUPABASE_KEY`.
+2. Defina o comando de build como `node build-env.js` (ou adicione à pipeline existente).
+3. Mantenha o diretório de publicação como `.` (raiz do repositório).
+4. Durante o build, o script `build-env.js` gera automaticamente um `env.js` contendo `window.__ENV = { SUPABASE_URL, SUPABASE_KEY }`, garantindo que o arquivo esteja presente no deploy sem precisar versionar segredos.
 
 Observações:
 - Use a Public (anon) key apenas para operações seguras e públicas. Para operações sensíveis, implemente regras no Supabase (políticas RLS) e endpoints server-side.
