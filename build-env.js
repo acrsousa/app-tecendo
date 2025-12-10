@@ -1,10 +1,11 @@
 // Generates env.js at build time using Netlify environment variables.
 const fs = require('fs');
 
-const { SUPABASE_URL, SUPABASE_KEY } = process.env;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.SUPABASE_DATABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  throw new Error('Missing SUPABASE_URL and/or SUPABASE_KEY environment variables.');
+  throw new Error('Missing SUPABASE_URL/SUPABASE_DATABASE_URL and/or SUPABASE_KEY/SUPABASE_ANON_KEY environment variables.');
 }
 
 const envConfig = {
