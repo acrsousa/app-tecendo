@@ -149,6 +149,72 @@ const EMPTY_MEDICATION_FORM = {
   ativo: true
 };
 
+// Alarmes locais para medicação (sem mudar Supabase)
+const MED_ALARM_KEY = '_medAlarmRegistry';
+const ensureAlarmRegistry = () => {
+  if(!window[MED_ALARM_KEY]) window[MED_ALARM_KEY] = new Map();
+  return window[MED_ALARM_KEY];
+};
+
+const requestNotificationPermission = async () => {
+  if(!('Notification' in window)) return false;
+  if(Notification.permission === 'granted') return true;
+  if(Notification.permission === 'denied') return false;
+  const perm = await Notification.requestPermission();
+  return perm === 'granted';
+};
+
+const notifyMedication = async (title, body) => {
+  const ok = await requestNotificationPermission();
+  if(ok) {
+    try { new Notification(title, { body, silent:false }); } catch(_) { alert(`${title}\n${body}`); }
+  } else {
+    alert(`${title}\n${body}`);
+  }
+  if(navigator.vibrate) navigator.vibrate([200, 80, 200]);
+};
+
+const scheduleMedicationAlarms = (med) => {
+  const registry = ensureAlarmRegistry();
+  const id = med.medicationId || med.medication_id || med.id;
+  if(!id) return;
+  // Limpa alarmes antigos deste medicamento
+  if(registry.has(id)) {
+    registry.get(id).forEach(clearTimeout);
+    registry.delete(id);
+  }
+
+  const horariosArr = Array.isArray(med.horarios)
+    ? med.horarios
+    : String(med.horarios || '').split(',').map(h => h.trim()).filter(Boolean);
+  if(horariosArr.length === 0) return;
+
+  const timers = [];
+
+  const scheduleOne = (timeStr) => {
+    const [hh, mm] = timeStr.split(':').map(Number);
+    if(Number.isNaN(hh) || Number.isNaN(mm)) return;
+    const now = new Date();
+    const target = new Date();
+    target.setHours(hh, mm, 0, 0);
+    if(target <= now) target.setDate(target.getDate() + 1);
+    const delay = target.getTime() - now.getTime();
+
+    const title = `Hora do remédio: ${med.nome_medicamento || med.nome || 'Medicação'}`;
+    const body = `${med.dosagem ? `Dose: ${med.dosagem} • ` : ''}Horário: ${timeStr}`;
+
+    const tid = setTimeout(async () => {
+      await notifyMedication(title, body);
+      // Reagenda automaticamente para o próximo dia
+      scheduleOne(timeStr);
+    }, delay);
+    timers.push(tid);
+  };
+
+  horariosArr.forEach(scheduleOne);
+  registry.set(id, timers);
+};
+
 const mascaraCPF = v => v.replace(/\D/g,'').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})/,'$1-$2').replace(/(-\d{2})\d+?$/,'$1');
 const mascaraData = v => v.replace(/\D/g,'').replace(/(\d{2})(\d)/,'$1/$2').replace(/(\d{2})(\d)/,'$1/$2').replace(/(\d{4})\d+?$/,'$1');
 const mascaraTelefone = v => {
@@ -804,6 +870,14 @@ const getMediaDuration = (file) => {
 
 const NovaMensagem = ({onSend, onBack}) => {
   const [txt, setTxt] = useState('');
+  const [bpStatus, setBpStatus] = useState('');
+  const [bpValue, setBpValue] = useState('');
+  const [glucoseStatus, setGlucoseStatus] = useState('');
+  const [glucoseValue, setGlucoseValue] = useState('');
+  const [gestationStatus, setGestationStatus] = useState('');
+  const [gestationNotes, setGestationNotes] = useState('');
+  const [childStatus, setChildStatus] = useState('');
+  const [childNotes, setChildNotes] = useState('');
   const [files, setFiles] = useState([]);
   const [recordingAudio, setRecordingAudio] = useState(false);
   const [recordingMs, setRecordingMs] = useState(0);
@@ -910,9 +984,27 @@ const NovaMensagem = ({onSend, onBack}) => {
   };
 
   const handleSend = () => {
-    if(!txt && files.length === 0) return alert('Escreva ou anexe algo.');
+    if(!bpStatus || !glucoseStatus || !gestationStatus || !childStatus) {
+      return alert('Responda aos campos obrigatórios do roteiro antes de enviar.');
+    }
+
+    const bpValueClean = bpValue.trim();
+    const glucoseValueClean = glucoseValue.trim();
+    const gestationNotesClean = gestationNotes.trim();
+    const childNotesClean = childNotes.trim();
+    const txtClean = txt.trim();
+
+    const resumo = [
+      'Roteiro diário do paciente:',
+      `Pressão arterial: ${bpStatus}${bpValueClean ? ` | valor informado: ${bpValueClean}` : ''}`,
+      `Glicemia: ${glucoseStatus}${glucoseValueClean ? ` | valor informado: ${glucoseValueClean}` : ''}`,
+      `Gestação: ${gestationStatus}${gestationNotesClean ? ` | detalhes: ${gestationNotesClean}` : ''}`,
+      `Saúde da criança: ${childStatus}${childNotesClean ? ` | detalhes: ${childNotesClean}` : ''}`
+    ].join('\n');
+
+    const textoFinal = txtClean ? `${resumo}\n\nObservações adicionais: ${txtClean}` : resumo;
     const tipo = files.length > 0 ? (files[0].file.type.startsWith('video') ? 'video' : files[0].file.type.startsWith('image') ? 'foto' : 'audio') : 'texto';
-    onSend(txt, files.map(f => f.file), tipo);
+    onSend(textoFinal, files.map(f => f.file), tipo);
     // Cleanup is handled by the component unmount/redirect in parent
   };
 
@@ -920,20 +1012,103 @@ const NovaMensagem = ({onSend, onBack}) => {
   const hasImage = files.some(f => f.file.type.startsWith('image'));
   const hasAudio = files.some(f => f.file.type.startsWith('audio'));
 
+  const OptionButton = ({ label, description, selected, onClick }) => (
+    <button
+      type="button"
+      className={`text-left rounded-xl border px-3 py-3 transition ${selected ? 'border-emerald-600 bg-emerald-50 shadow-sm' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+      onClick={onClick}
+    >
+      <div className="font-semibold text-slate-800">{label}</div>
+      {description && <div className="text-xs text-slate-600 mt-1">{description}</div>}
+    </button>
+  );
+
   return (
     <div className="p-5 h-screen flex flex-col bg-white fade-in">
       <div className="flex items-center gap-4 mb-4">
         <button onClick={onBack} className="text-2xl font-bold text-gray-400 px-2">←</button>
         <h2 className="text-xl font-bold text-slate-800">Novo Registro</h2>
       </div>
-      <textarea 
-        className="input-box flex-1 mb-6 text-lg p-4" 
-        style={{resize:'none'}}
-        placeholder="Descreva o que você está sentindo..." 
-        value={txt} 
-        onChange={e=>setTxt(e.target.value)} 
-      />
-      <div className="section-title">Anexar Mídia (Opcional)</div>
+      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 mb-4">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-700 font-bold">Roteiro Guiado</p>
+            <h3 className="text-lg font-extrabold text-emerald-900">Preencha antes de enviar</h3>
+          </div>
+          <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">Obrigatório</span>
+        </div>
+        <p className="text-sm text-emerald-900">Selecione a opção que mais se aproxima da sua situação. Não precisa saber números: escolha a melhor resposta e, se souber, complete no campo de texto.</p>
+      </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto pb-2">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="section-title mb-0">Pressão Arterial</div>
+            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OptionButton label="Não medi hoje" description="Sem acesso ao aparelho ou não conseguiu medir" selected={bpStatus==='Não medi hoje'} onClick={()=>setBpStatus('Não medi hoje')} />
+            <OptionButton label="Medi, estava normal" description="Sem tontura ou dor de cabeça" selected={bpStatus==='Medi, estava normal'} onClick={()=>setBpStatus('Medi, estava normal')} />
+            <OptionButton label="Medi, estava alta" description="Sentiu dor de cabeça, visão turva ou estava acima do habitual" selected={bpStatus==='Medi, estava alta'} onClick={()=>setBpStatus('Medi, estava alta')} />
+            <OptionButton label="Senti tontura/mal-estar" description="Mesmo sem medir, percebi mal-estar" selected={bpStatus==='Senti tontura ou mal-estar'} onClick={()=>setBpStatus('Senti tontura ou mal-estar')} />
+          </div>
+          <input className="input-box" placeholder="Se souber, informe o valor (ex: 12x8 ou 120/80)" value={bpValue} onChange={e=>setBpValue(e.target.value)} />
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="section-title mb-0">Glicemia</div>
+            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OptionButton label="Não medi hoje" description="Sem aparelho ou fita disponível" selected={glucoseStatus==='Não medi hoje'} onClick={()=>setGlucoseStatus('Não medi hoje')} />
+            <OptionButton label="Medi, estava controlada" description="Dentro do que costuma ficar" selected={glucoseStatus==='Medi, estava controlada'} onClick={()=>setGlucoseStatus('Medi, estava controlada')} />
+            <OptionButton label="Medi, estava alta" description="Acima do que costuma ficar" selected={glucoseStatus==='Medi, estava alta'} onClick={()=>setGlucoseStatus('Medi, estava alta')} />
+            <OptionButton label="Tive sintomas" description="Tremor, suor frio, sede intensa ou fraqueza" selected={glucoseStatus==='Tive sintomas de hipo ou hiper'} onClick={()=>setGlucoseStatus('Tive sintomas de hipo ou hiper')} />
+          </div>
+          <input className="input-box" placeholder="Se souber, informe o valor (ex: 110 mg/dL)" value={glucoseValue} onChange={e=>setGlucoseValue(e.target.value)} />
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="section-title mb-0">Gestação</div>
+            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OptionButton label="Não estou gestante / não se aplica" selected={gestationStatus==='Não gestante ou não se aplica'} onClick={()=>setGestationStatus('Não gestante ou não se aplica')} />
+            <OptionButton label="Estou gestante, sem sintomas novos" description="Sem sangramento, dor abdominal diferente ou inchaço" selected={gestationStatus==='Gestante, sem sintomas novos'} onClick={()=>setGestationStatus('Gestante, sem sintomas novos')} />
+            <OptionButton label="Estou gestante, com sintomas" description="Sangramento, dor abdominal, inchaço, falta de ar" selected={gestationStatus==='Gestante, com sintomas ou alterações'} onClick={()=>setGestationStatus('Gestante, com sintomas ou alterações')} />
+          </div>
+          <textarea className="input-box" style={{resize:'vertical'}} rows={2} placeholder="Descreva se percebeu algo diferente na gestação (opcional)" value={gestationNotes} onChange={e=>setGestationNotes(e.target.value)} />
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="section-title mb-0">Saúde da Criança</div>
+            <span className="text-[11px] font-bold text-amber-700">Obrigatório</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OptionButton label="Não se aplica / sem crianças" selected={childStatus==='Não se aplica / sem crianças'} onClick={()=>setChildStatus('Não se aplica / sem crianças')} />
+            <OptionButton label="A criança está bem" description="Sem febre, tosse ou mudança de comportamento" selected={childStatus==='Criança está bem'} onClick={()=>setChildStatus('Criança está bem')} />
+            <OptionButton label="Criança doente ou diferente" description="Febre, tosse, diarreia, não está se alimentando, outros sinais" selected={childStatus==='Criança doente ou com alteração'} onClick={()=>setChildStatus('Criança doente ou com alteração')} />
+          </div>
+          <textarea className="input-box" style={{resize:'vertical'}} rows={2} placeholder="Explique o que mudou na criança (opcional)" value={childNotes} onChange={e=>setChildNotes(e.target.value)} />
+        </div>
+
+        <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-4 shadow-sm space-y-2">
+          <div className="section-title mb-1">Observações adicionais (opcional)</div>
+          <textarea 
+            className="input-box text-base"
+            style={{resize:'vertical'}}
+            placeholder="Algum outro sintoma, remédio que tomou ou situação importante?"
+            value={txt}
+            onChange={e=>setTxt(e.target.value)}
+            rows={3}
+          />
+        </div>
+      </div>
+
+      <div className="section-title mt-4">Anexar Mídia (Opcional)</div>
       <p className="text-xs text-gray-500 mb-3" dangerouslySetInnerHTML={{ __html: 'Você pode enviar <b>ou</b> um vídeo (máx 1 min), <b>ou</b> uma foto (máx 1MB) e um áudio (máx 1 min).' }} />
       <div className="media-row flex-wrap">
         <label className={`btn-media ${hasVideo || hasImage ? 'opacity-50 cursor-not-allowed' : ''}`}>
@@ -949,7 +1124,6 @@ const NovaMensagem = ({onSend, onBack}) => {
           <span className="text-[10px] font-normal">(usa microfone do app)</span>
         </button>
       </div>
-      {recordingAudio && <div className="text-xs text-amber-700 font-semibold mb-3">Tempo: {formatDuration(recordingMs/1000)} / 01:00</div>}
       {recordingAudio && <div className="text-xs text-amber-700 font-semibold mb-3">Tempo: {formatDuration(recordingMs/1000)} / 01:00</div>}
       {verifying && <div className="text-center text-gray-500 my-2">Verificando arquivo...</div>}
       {files.length > 0 && (
@@ -1954,6 +2128,10 @@ const MedicationEditorModal = ({patient, onClose}) => {
     refreshMedications();
   }, [patientId, refreshMedications]);
 
+  useEffect(() => {
+    medications.forEach(scheduleMedicationAlarms);
+  }, [medications]);
+
   const toggleHorario = horario => {
     setForm(prev => {
       const exists = prev.horarios.includes(horario);
@@ -1978,6 +2156,10 @@ const MedicationEditorModal = ({patient, onClose}) => {
     }
     if(!form.tipo) {
       setError('Selecione o tipo da medicação.');
+      return;
+    }
+    if(!form.dosagem.trim()) {
+      setError('Informe a concentração/dose.');
       return;
     }
     if(form.horarios.length === 0) {
@@ -2028,6 +2210,14 @@ const MedicationEditorModal = ({patient, onClose}) => {
         cpf_paciente: patient?.cpf || '',
         updated_at: timestamp,
         created_at: timestamp
+      });
+
+      // Agenda alarmes locais para o paciente neste dispositivo (sem tocar Supabase)
+      scheduleMedicationAlarms({
+        medicationId,
+        nome_medicamento: form.nome.trim(),
+        dosagem: form.dosagem,
+        horarios: form.horarios
       });
 
       setForm({...EMPTY_MEDICATION_FORM});
@@ -2101,7 +2291,7 @@ const MedicationEditorModal = ({patient, onClose}) => {
                               <div className="text-xs uppercase tracking-[0.3em] text-slate-400 font-bold mb-1">Nome</div>
                               <div className="text-lg font-bold text-slate-800">{med.nome_medicamento || med.nome || 'Sem nome'}</div>
                               <div className="text-xs text-slate-500 mt-1">Tipo: {med.tipo_medicamento || med.tipo || '---'}</div>
-                              {med.dosagem && <div className="text-xs text-slate-500 mt-1">Dosagem: {med.dosagem}</div>}
+                              {med.dosagem && <div className="text-xs text-slate-500 mt-1">Dose: {med.dosagem}</div>}
                             </div>
                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
                               {ativo ? 'Ativo' : 'Inativo'}
@@ -2142,8 +2332,8 @@ const MedicationEditorModal = ({patient, onClose}) => {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">Dosagens</label>
-                    <textarea className="input-box" rows={2} placeholder="Ex.: 500mg, 2x ao dia" value={form.dosagem} onChange={e=>handleInput('dosagem', e.target.value)} />
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">Concentração / Dose<span className="text-red-500"> *</span></label>
+                    <textarea className="input-box" rows={2} placeholder="Ex.: 500 mg • 1 comprimido de manhã e outro à noite" value={form.dosagem} onChange={e=>handleInput('dosagem', e.target.value)} />
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-500 mb-2 block">Horários do Dia<span className="text-red-500"> *</span></label>
